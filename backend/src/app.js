@@ -22,7 +22,7 @@
 
 
     app.use(cors({
-    origin: "https://connectify2-nj9q.onrender.com/", // allow only your frontend
+    origin: "https://connectify2-nj9q.onrender.com", // allow only your frontend
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     }));
