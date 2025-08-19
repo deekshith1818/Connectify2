@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import TextField from '@mui/material/TextField';
 import { io } from "socket.io-client";
-import styles from "../styles/VideoComponent.module.css";
+import styles from "../styles/videoComponent.module.css";
 import { Badge } from '@mui/material';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
