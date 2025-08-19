@@ -2,11 +2,12 @@ import { createContext, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import httpStatus from "http-status";
+import server from "../environment"; // Adjust the import path as necessary
 
 export const AuthContext = createContext({});
 
 const client = axios.create({
-  baseURL: "http://localhost:8000/api/v1/users",
+  baseURL: `${server}/api/v1/users`,
   timeout: 10000, // 10 second timeout
   headers: {
     'Content-Type': 'application/json',
