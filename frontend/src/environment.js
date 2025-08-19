@@ -1,7 +1,7 @@
 const IS_PROD=true;
 
 
-const server=IS_PROD?"https://connectify-as0p.onrender.com":"http://localhost:8000";
+const server=IS_PROD?"https://connectify3.onrender.com":"http://localhost:8000";
  
 
 
