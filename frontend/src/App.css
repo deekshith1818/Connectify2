@@ -1,0 +1,102 @@
+.landing-page-container {
+  height:100vh;
+  width: 100vw;
+  background:url("./assets/background.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: white;
+}
+
+.landing-page-container nav{
+  padding-inline: 1.2rem;
+  padding-block: 1.6rem;
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.landing-page-container nav .nav-lists{
+  display: flex;
+  
+  gap: 1.2rem;
+}
+.landing-page-container h2{
+  font-size: 1.8rem;
+  font-weight: 500;
+
+}
+.landing-main-container {
+  display: flex;
+  justify-content: space-between;
+  padding-inline:3rem;
+  align-items: center;
+  height: 80vh;
+ 
+}
+
+.landing-main-container >div:nth-child(1) div[role='button']{
+  background: #d97500;
+  margin-top: 1.7rem;
+  width: fit-content;
+  padding: 1rem;
+  border-radius: 20px;
+}
+.landing-main-container >div:nth-child(1) div[role='button'] a{
+  text-decoration: none;
+  color: white;
+}
+
+
+.landing-main-container >div:nth-child(1){
+  font-size: 2.2rem;
+}
+
+.landing-main-container >div:nth-child(2) img{
+  height: 80vh;
+  width: auto;
+}
+
+.navBar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  
+  gap: 1.2rem;
+}
+
+
+.navBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 20px;
+  text-align: center;
+
+}
+.meetContainer {
+  display: flex;
+  padding-inline: 20px;
+  height: 80vh;
+  gap: 10vw;
+  justify-content: center;
+}
+
+
+
+.leftPanel {
+  height: 100%;
+  display: flex;
+  align-items: center;
+
+}
+
+.rightPanel {
+  display: flex;
+  align-items: center;
+}
+
+.rightPanel > img {
+  width: 30vw;
+  height: auto;
+  border-radius: 20px;
+}
