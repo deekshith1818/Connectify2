@@ -20,12 +20,13 @@
 
     app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-    // CORS configuration - allow both production and development origins
+    // CORS configuration
     const allowedOrigins = [
         "https://connectify2-nj9q.onrender.com",
         "https://connectify3.onrender.com", 
         "http://localhost:5173", // Vite dev server
-        "http://localhost:3000"  // Alternative dev port
+        "http://localhost:3000",  // Alternative dev port
+        "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app" // Your Vercel URL
     ];
 
     app.use(cors({
