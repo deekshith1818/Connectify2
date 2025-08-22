@@ -5,9 +5,17 @@ let connections = {};
 let timeOnline = {};
 
 const connectToSocket = (server) => {
+    // CORS configuration - allow both production and development origins
+    const allowedOrigins = [
+        "https://connectify2-nj9q.onrender.com",
+        "https://connectify3.onrender.com", 
+        "http://localhost:5173", // Vite dev server
+        "http://localhost:3000"  // Alternative dev port
+    ];
+
     const io = new Server(server, {
         cors: {
-            origin: "*", 
+            origin: allowedOrigins,
             methods: ["GET", "POST"],
             allowedHeaders: ["*"],
             credentials: true

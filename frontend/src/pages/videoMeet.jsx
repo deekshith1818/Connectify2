@@ -1,18 +1,28 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import TextField from '@mui/material/TextField';
 import { io } from "socket.io-client";
-import styles from "../styles/videoComponent.module.css";
-import { Badge } from '@mui/material';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import VideocamIcon from '@mui/icons-material/Videocam';
-import VideocamOffIcon from '@mui/icons-material/VideocamOff';
-import MicIcon from '@mui/icons-material/Mic';
-import MicOffIcon from '@mui/icons-material/MicOff';
-import CallEndIcon from '@mui/icons-material/CallEnd';
-import ScreenShareIcon from '@mui/icons-material/ScreenShare';
-import StopScreenShareIcon from '@mui/icons-material/StopScreenShare'
-import ChatIcon from '@mui/icons-material/Chat'
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
+import { Badge } from '../components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  Phone, 
+  PhoneOff, 
+  Monitor, 
+  MonitorOff,
+  Users,
+  MessageCircle,
+  Settings,
+  MoreVertical,
+  Volume2,
+  VolumeX,
+  User,
+  LogOut
+} from 'lucide-react';
 import server from '../environment';
 
 const server_url = `${server}`;
@@ -45,6 +55,8 @@ export default function VideoMeetComponent() {
     const [askForUsername, setAskForUsername] = useState(true);
     const [username, setUsername] = useState("");
     const [videos, setVideos] = useState([]);
+    const [showParticipants, setShowParticipants] = useState(false);
+    const [participants, setParticipants] = useState([]);
 
     // Helper functions for black video and silence audio
     const silence = useCallback(() => {
@@ -80,7 +92,7 @@ export default function VideoMeetComponent() {
             try {
                 const audioPermission = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioPermission.getTracks().forEach(track => track.stop());
-                setAudioAvailable(false);
+                setAudioAvailable(true);
             } catch (e) {
                 console.log("Audio not available:", e);
                 setAudioAvailable(false);
@@ -239,7 +251,17 @@ export default function VideoMeetComponent() {
 
     // Connect to socket server
     const connectToSocketServer = useCallback(() => {
-        socketRef.current = io.connect(server_url, { secure: false });
+        const isSecure = server_url.startsWith('https');
+        socketRef.current = io.connect(server_url, { 
+            secure: isSecure,
+            rejectUnauthorized: false,
+            transports: ['websocket', 'polling']
+        });
+        
+        socketRef.current.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+        });
+        
         socketRef.current.on('signal', gotMessageFromServer);
         
         socketRef.current.on("connect", () => {
@@ -250,6 +272,7 @@ export default function VideoMeetComponent() {
 
             socketRef.current.on("user-left", (id) => {
                 setVideos((videos) => videos.filter((video) => video.socketId !== id));
+                setParticipants((participants) => participants.filter((p) => p.socketId !== id));
                 if (connections[id]) {
                     connections[id].close();
                     delete connections[id];
@@ -257,6 +280,21 @@ export default function VideoMeetComponent() {
             });
 
             socketRef.current.on("user-joined", (id, clients) => {
+                // Add current user to participants
+                setParticipants(prev => {
+                    const currentUser = prev.find(p => p.socketId === socketIdRef.current);
+                    if (!currentUser) {
+                        return [...prev, {
+                            socketId: socketIdRef.current,
+                            name: username,
+                            isMuted: !audio,
+                            isVideoOff: !video,
+                            isLocal: true
+                        }];
+                    }
+                    return prev;
+                });
+
                 clients.forEach((socketListId) => {
                     if (!connections[socketListId]) {
                         connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
@@ -287,6 +325,21 @@ export default function VideoMeetComponent() {
                                     return [...videos, newVideo];
                                 }
                             });
+
+                            // Add remote user to participants
+                            setParticipants(prev => {
+                                const existing = prev.find(p => p.socketId === socketListId);
+                                if (!existing) {
+                                    return [...prev, {
+                                        socketId: socketListId,
+                                        name: `User ${socketListId.slice(-4)}`,
+                                        isMuted: false,
+                                        isVideoOff: false,
+                                        isLocal: false
+                                    }];
+                                }
+                                return prev;
+                            });
                         };
 
                         if (window.localStream) {
@@ -312,7 +365,7 @@ export default function VideoMeetComponent() {
                 }
             });
         });
-    }, [gotMessageFromServer]);
+    }, [gotMessageFromServer, username, audio, video]);
 
     // Initialize media and connect
     const getMedia = useCallback(() => {
@@ -321,10 +374,9 @@ export default function VideoMeetComponent() {
         connectToSocketServer();
     }, [videoAvailable, audioAvailable, connectToSocketServer]);
 
-    // Send chat message - FIXED: Only emit to server, don't add to local state
+    // Send chat message
     const sendMessage = useCallback(() => {
         if (message.trim() && socketRef.current) {
-            // Only emit to server - the server will broadcast back to all clients including sender
             socketRef.current.emit('chat-message', message, username);
             setMessage("");
         }
@@ -349,13 +401,12 @@ export default function VideoMeetComponent() {
         window.location.href = "/home";
     }, []);
 
-    // Add message to chat - FIXED: Add all messages from server (including own)
+    // Add message to chat
     const addMessage = useCallback((data, sender, socketIdSender) => {
         setMessages((prevMessages) => [
             ...prevMessages,
             { sender: sender, data: data }
         ]);
-        // Only increment new message counter for messages from other users
         if (socketIdSender !== socketIdRef.current) {
             setNewMessages((prevNewMessages) => prevNewMessages + 1);
         } 
@@ -372,11 +423,17 @@ export default function VideoMeetComponent() {
     // Toggle video
     const handleVideo = useCallback(() => {
         setVideo(!video);
+        setParticipants(prev => prev.map(p => 
+            p.isLocal ? { ...p, isVideoOff: !video } : p
+        ));
     }, [video]);
 
     // Toggle audio
     const handleAudio = useCallback(() => {
         setAudio(!audio);
+        setParticipants(prev => prev.map(p => 
+            p.isLocal ? { ...p, isMuted: !audio } : p
+        ));
     }, [audio]);
 
     // Toggle screen sharing
@@ -416,97 +473,276 @@ export default function VideoMeetComponent() {
         }
     }, [screen, getDisplayMedia]);
 
+    if (askForUsername) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
+                <Card className="w-full max-w-md">
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-2xl">Join Meeting</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Your Name</label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && connect()}
+                                placeholder="Enter your name"
+                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <Button 
+                            onClick={connect} 
+                            disabled={!username.trim()}
+                            className="w-full"
+                        >
+                            Join Meeting
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     return (
-        <div>
-            {askForUsername ? (
-                <div>
-                    <h2>Enter into lobby</h2>
-                    <TextField 
-                        id="outlined-basic" 
-                        label="Username" 
-                        value={username} 
-                        onChange={e => setUsername(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && connect()}
-                    />
-                    <Button variant='contained' onClick={connect} disabled={!username.trim()}>
-                        Connect
-                    </Button>
-                    <div>
-                        <video ref={localVideoRef} autoPlay muted></video>
+        <div className="h-screen bg-slate-900 flex">
+            {/* Participants Sidebar - Desktop */}
+            <div className={`hidden lg:block w-80 bg-slate-800 border-r border-slate-700 ${showParticipants ? 'block' : 'hidden'}`}>
+                <div className="p-4 border-b border-slate-700">
+                    <h3 className="text-lg font-semibold text-white flex items-center">
+                        <Users className="mr-2 h-5 w-5" />
+                        Participants ({participants.length})
+                    </h3>
+                </div>
+                <div className="p-4 space-y-3 max-h-[calc(100vh-80px)] overflow-y-auto">
+                    {participants.map((participant, index) => (
+                        <div key={participant.socketId} className="flex items-center space-x-3 p-3 rounded-lg bg-slate-700/50">
+                            <Avatar className="h-10 w-10">
+                                <AvatarFallback className="bg-blue-600 text-white">
+                                    {participant.name[0]?.toUpperCase() || 'U'}
+                                </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                    {participant.name}
+                                    {participant.isLocal && <span className="ml-2 text-xs text-slate-400">(You)</span>}
+                                </p>
+                            </div>
+                            <div className="flex space-x-1">
+                                {participant.isMuted && (
+                                    <Badge variant="destructive" className="text-xs">
+                                        <MicOff className="h-3 w-3 mr-1" />
+                                        Muted
+                                    </Badge>
+                                )}
+                                {participant.isVideoOff && (
+                                    <Badge variant="secondary" className="text-xs">
+                                        <VideoOff className="h-3 w-3 mr-1" />
+                                        Video Off
+                                    </Badge>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Main Video Area */}
+            <div className="flex-1 flex flex-col">
+                {/* Header */}
+                <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowParticipants(!showParticipants)}
+                            className="lg:hidden text-white hover:bg-slate-700"
+                        >
+                            <Users className="h-5 w-5" />
+                        </Button>
+                        <h2 className="text-lg font-semibold text-white">Meeting Room</h2>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <Button variant="ghost" size="sm" className="text-white hover:bg-slate-700">
+                            <Settings className="h-5 w-5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-white hover:bg-slate-700">
+                            <MoreVertical className="h-5 w-5" />
+                        </Button>
                     </div>
                 </div>
-            ) : (
-                <div className={styles.meetVideoContainer}>
-                    {showModal && (
-                        <div className={styles.chatRoom}>
-                            <div className={styles.chatContainer}>
-                                <h1>Chat</h1>
-                                <div className={styles.chattingDisplay}>
-                                    {messages.length !== 0 ? messages.map((item, index) => (
-                                        <div style={{ marginBottom: "20px" }} key={index}>
-                                            <p style={{ fontWeight: "bold" }}>{item.sender}</p>
-                                            <p>{item.data}</p>
-                                        </div>
-                                    )) : <p>No Messages Yet</p>}
+
+                {/* Video Grid */}
+                <div className="flex-1 relative bg-slate-900 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 h-full">
+                        {/* Local Video */}
+                        <div className="relative bg-slate-800 rounded-xl overflow-hidden">
+                            <video
+                                ref={localVideoRef}
+                                autoPlay
+                                muted
+                                className="w-full h-full object-cover"
+                            />
+                            <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
+                                <span className="text-white text-sm">{username} (You)</span>
+                            </div>
+                        </div>
+
+                        {/* Remote Videos */}
+                        {videos.map((video) => (
+                            <div key={video.socketId} className="relative bg-slate-800 rounded-xl overflow-hidden">
+                                <video
+                                    data-socket={video.socketId}
+                                    ref={(ref) => {
+                                        if (ref && video.stream) {
+                                            ref.srcObject = video.stream;
+                                        }
+                                    }}
+                                    autoPlay
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
+                                    <span className="text-white text-sm">User {video.socketId.slice(-4)}</span>
                                 </div>
-                                <div className={styles.chattingArea}>
-                                    <TextField 
-                                        value={message} 
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Chat Modal */}
+                    {showModal && (
+                        <div className="absolute top-4 right-4 w-80 h-96 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700">
+                            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                <h3 className="font-semibold text-slate-900 dark:text-white">Chat</h3>
+                            </div>
+                            <div className="p-4 h-64 overflow-y-auto space-y-3">
+                                {messages.length > 0 ? messages.map((item, index) => (
+                                    <div key={index} className="space-y-1">
+                                        <p className="text-sm font-medium text-slate-900 dark:text-white">{item.sender}</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-300">{item.data}</p>
+                                    </div>
+                                )) : (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">No messages yet</p>
+                                )}
+                            </div>
+                            <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="text"
+                                        value={message}
                                         onChange={(e) => setMessage(e.target.value)}
                                         onKeyPress={handleKeyPress}
-                                        id="outlined-basic" 
-                                        label="Enter Your chat" 
-                                        variant="outlined" 
+                                        placeholder="Type a message..."
+                                        className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
-                                    <Button variant='contained' onClick={sendMessage}>
+                                    <Button onClick={sendMessage} size="sm">
                                         Send
                                     </Button>
                                 </div>
                             </div>
                         </div>
                     )}
-
-                    <div className={styles.buttonContainers}>
-                        <IconButton onClick={handleVideo} style={{color:"white"}}>
-                            {video ? <VideocamIcon/> : <VideocamOffIcon/>}
-                        </IconButton>
-                        <IconButton onClick={handleEndCall} style={{color:"red"}}>
-                            <CallEndIcon/>
-                        </IconButton>
-                        <IconButton onClick={handleAudio} style={{color:"white"}}>
-                            {audio ? <MicIcon/> : <MicOffIcon/>}
-                        </IconButton>
-                        {screenAvailable && (
-                            <IconButton onClick={handleScreen} style={{ color: "white" }}>
-                                {screen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
-                            </IconButton>
-                        )}
-                        <Badge badgeContent={newMessages} max={999} color='secondary'>
-                            <IconButton onClick={toggleChat} style={{ color: "white" }}>
-                                <ChatIcon />
-                            </IconButton>
-                        </Badge>
-                    </div>
-
-                    <video className={styles.meetUserVideo} ref={localVideoRef} autoPlay muted></video>
-
-                    {videos.map((video) => (
-                        <div className={styles.conferenceView} key={video.socketId}>
-                            <h2>{video.socketId}</h2>
-                            <video
-                                data-socket={video.socketId}
-                                ref={(ref) => {
-                                    if (ref && video.stream) {
-                                        ref.srcObject = video.stream;
-                                    }
-                                }}
-                                autoPlay
-                                playsInline
-                            />
-                        </div>
-                    ))}
                 </div>
-            )}
+
+                {/* Control Bar */}
+                <div className="bg-slate-800 border-t border-slate-700 p-4">
+                    <div className="flex items-center justify-center space-x-4">
+                        <Button
+                            variant={audio ? "outline" : "destructive"}
+                            size="icon"
+                            onClick={handleAudio}
+                            className="rounded-full h-12 w-12"
+                        >
+                            {audio ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                        </Button>
+
+                        <Button
+                            variant={video ? "outline" : "destructive"}
+                            size="icon"
+                            onClick={handleVideo}
+                            className="rounded-full h-12 w-12"
+                        >
+                            {video ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                        </Button>
+
+                        {screenAvailable && (
+                            <Button
+                                variant={screen ? "destructive" : "outline"}
+                                size="icon"
+                                onClick={handleScreen}
+                                className="rounded-full h-12 w-12"
+                            >
+                                {screen ? <MonitorOff className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
+                            </Button>
+                        )}
+
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={toggleChat}
+                            className="rounded-full h-12 w-12 relative"
+                        >
+                            <MessageCircle className="h-5 w-5" />
+                            {newMessages > 0 && (
+                                <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                                    {newMessages}
+                                </Badge>
+                            )}
+                        </Button>
+
+                        <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={handleEndCall}
+                            className="rounded-full h-12 w-12"
+                        >
+                            <PhoneOff className="h-5 w-5" />
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Participants Dialog - Mobile */}
+            <Dialog open={showParticipants && window.innerWidth < 1024} onOpenChange={setShowParticipants}>
+                <DialogContent className="w-80 max-h-[80vh] overflow-hidden">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center">
+                            <Users className="mr-2 h-5 w-5" />
+                            Participants ({participants.length})
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {participants.map((participant) => (
+                            <div key={participant.socketId} className="flex items-center space-x-3 p-3 rounded-lg bg-slate-100 dark:bg-slate-700">
+                                <Avatar className="h-10 w-10">
+                                    <AvatarFallback className="bg-blue-600 text-white">
+                                        {participant.name[0]?.toUpperCase() || 'U'}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                        {participant.name}
+                                        {participant.isLocal && <span className="ml-2 text-xs text-slate-500">(You)</span>}
+                                    </p>
+                                </div>
+                                <div className="flex space-x-1">
+                                    {participant.isMuted && (
+                                        <Badge variant="destructive" className="text-xs">
+                                            <MicOff className="h-3 w-3 mr-1" />
+                                        </Badge>
+                                    )}
+                                    {participant.isVideoOff && (
+                                        <Badge variant="secondary" className="text-xs">
+                                            <VideoOff className="h-3 w-3 mr-1" />
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

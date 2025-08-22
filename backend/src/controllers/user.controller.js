@@ -9,7 +9,7 @@ const login = async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ message: "Please Provide" })
+        return res.status(400).json({ message: "Please Provide username and password" })
     }
 
     try {
@@ -26,7 +26,15 @@ const login = async (req, res) => {
 
             user.token = token;
             await user.save();
-            return res.status(httpStatus.OK).json({ token: token })
+            
+            // Return user data along with token
+            return res.status(httpStatus.OK).json({ 
+                token: token,
+                user: {
+                    name: user.name,
+                    username: user.username
+                }
+            })
         } else {
             return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid Username or password" })
         }
@@ -44,7 +52,7 @@ const register = async (req, res) => {
     try {
         const existingUser = await User.findOne({ username });
         if (existingUser) {
-            return res.status(httpStatus.FOUND).json({ message: "User already exists" });
+            return res.status(409).json({ message: "User already exists" });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -60,32 +68,29 @@ const register = async (req, res) => {
         res.status(httpStatus.CREATED).json({ message: "User Registered" })
 
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 
 }
 
 
 const getUserHistory = async (req, res) => {
-    const { token } = req.query;
-
     try {
-        const user = await User.findOne({ token: token });
-        const meetings = await Meeting.find({ user_id: user.username })
+        // User is already authenticated and available from auth middleware
+        const meetings = await Meeting.find({ user_id: req.user.username })
         res.json(meetings)
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 }
 
 const addToHistory = async (req, res) => {
-    const { token, meeting_code } = req.body;
+    const { meeting_code } = req.body;
 
     try {
-        const user = await User.findOne({ token: token });
-
+        // User is already authenticated and available from auth middleware
         const newMeeting = new Meeting({
-            user_id: user.username,
+            user_id: req.user.username,
             meetingCode: meeting_code
         })
 
@@ -93,7 +98,7 @@ const addToHistory = async (req, res) => {
 
         res.status(httpStatus.CREATED).json({ message: "Added code to history" })
     } catch (e) {
-        res.json({ message: `Something went wrong ${e}` })
+        res.status(500).json({ message: `Something went wrong ${e}` })
     }
 }
 

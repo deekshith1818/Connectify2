@@ -153,23 +153,35 @@ export const AuthProvider = ({ children }) => {
   };
    const getHistoryOfUser = async () => {
         try {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                throw new Error("No authentication token found");
+            }
+            
             let request = await client.get("/get_all_activity", {
-                params: {
-                    token: localStorage.getItem("token")
+                headers: {
+                    'Authorization': `Bearer ${token}`
                 }
             });
             return request.data
-        } catch
-         (err) {
+        } catch (err) {
             throw err;
         }
     }
 
   const addToUserHistory = async (meetingCode) => {
         try {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                throw new Error("No authentication token found");
+            }
+            
             let request = await client.post("/add_to_activity", {
-                token: localStorage.getItem("token"),
                 meeting_code: meetingCode
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
             return request
         } catch (e) {
