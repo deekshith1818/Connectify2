@@ -25,6 +25,7 @@
         "https://connectify2-nj9q.onrender.com",
         "https://connectify3.onrender.com", 
         "https://connectify2-jhtb.onrender.com",
+        "https://connectify2-cyxk.onrender.com",
         "http://localhost:5173", // Vite dev server
         "http://localhost:3000",  // Alternative dev port
         "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app", // Your Vercel URL
