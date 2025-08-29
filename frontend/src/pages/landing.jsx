@@ -74,9 +74,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
       {/* Test div to check if Tailwind is working */}
-      <div className="bg-red-500 text-white p-4 text-center">
-        If you can see this red box with white text, Tailwind is working!
-      </div>
+     
       
       {/* Navigation */}
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 dark:bg-slate-900/80 dark:border-slate-700">

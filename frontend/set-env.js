@@ -1,7 +1,7 @@
 // Script to set environment variables in Vercel
 // Run this with: node set-env.js
 
-const { execSync } = require('child_process');
+import { execSync } from 'child_process';
 
 const envVars = {
   'VITE_API_URL': 'https://connectify3.onrender.com',

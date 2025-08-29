@@ -26,7 +26,12 @@
         "https://connectify3.onrender.com", 
         "http://localhost:5173", // Vite dev server
         "http://localhost:3000",  // Alternative dev port
-        "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app" // Your Vercel URL
+        "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app", // Your Vercel URL
+        "https://connectify-frontend-ijuffjl3v-deekshith-nanavenis-projects.vercel.app", // Your new Vercel URL
+        "https://connectify-frontend-1l53a45hw-deekshith-nanavenis-projects.vercel.app", // Your latest Vercel URL
+        "https://connectify-frontend-jf8gzlm9x-deekshith-nanavenis-projects.vercel.app", // Your new Vercel URL
+        "https://connectify-frontend-lfpo0ycx3-deekshith-nanavenis-projects.vercel.app", // Your latest Vercel URL
+        "https://connectify-frontend-9baqn7a5n-deekshith-nanavenis-projects.vercel.app" // Your new Vercel URL
     ];
 
     app.use(cors({
@@ -46,6 +51,23 @@
     }));
 
     app.use("/api/v1/users", userRoutes);
+
+    // Health check route
+    app.get("/health", (req, res) => {
+        res.status(200).json({ 
+            message: "Backend is running", 
+            timestamp: new Date().toISOString(),
+            status: "healthy"
+        });
+    });
+
+    // Test route for API
+    app.get("/api/test", (req, res) => {
+        res.status(200).json({ 
+            message: "API is working", 
+            timestamp: new Date().toISOString()
+        });
+    });
 
     const start = async () => {
         const mongoUri = process.env.MONGODB_URI || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
