@@ -24,6 +24,21 @@ const __dirname = path.dirname(__filename);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// CORS Configuration - Simple and permissive for development
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
 // ✅ CORS config
 const allowedOrigins = [
   "https://connectify2-nj9q.onrender.com",
@@ -32,27 +47,20 @@ const allowedOrigins = [
   "https://connectify2-cyxk.onrender.com",
   "http://localhost:5173", 
   "http://localhost:3000",
+  "https://connectify-frontend-d62v0shob-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-ijuffjl3v-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-1l53a45hw-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-jf8gzlm9x-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-lfpo0ycx3-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-9baqn7a5n-deekshith-nanavenis-projects.vercel.app"
+  "https://connectify-frontend-9baqn7a5n-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-cwtvwzw9b-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-4o7f2y4t8-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-f7ybif8d2-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-fkjp7t4z1-deekshith-nanavenis-projects.vercel.app"
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
+// CORS is handled by custom middleware above
 
 // ✅ API routes
 app.use("/api/v1/users", userRoutes);
