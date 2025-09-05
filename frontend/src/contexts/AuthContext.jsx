@@ -12,7 +12,6 @@ const client = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-  
   },
   withCredentials: false // Set to false to avoid CORS preflight complexity
 });
