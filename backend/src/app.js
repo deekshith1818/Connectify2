@@ -47,6 +47,7 @@ const allowedOrigins = [
   "https://connectify-frontend-oqiuc56up-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-iv258fm4b-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-h7qnj1y0i-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-iota.vercel.app",
 ];
 
 // ✅ Proper CORS setup
