@@ -12,7 +12,7 @@ const client = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+  
   },
   withCredentials: false // Set to false to avoid CORS preflight complexity
 });
@@ -109,11 +109,11 @@ export const AuthProvider = ({ children }) => {
       console.log("🌐 API URL:", `${server}/api/v1/users/login`);
       
       // First, try a preflight check
-      try {
-        await axios.options(`${server}/api/v1/users/login`);
-      } catch (preflightError) {
-        console.log("⚠️ Preflight check failed:", preflightError);
-      }
+      // try {
+      //   await axios.options(`${server}/api/v1/users/login`);
+      // } catch (preflightError) {
+      //   console.log("⚠️ Preflight check failed:", preflightError);
+      // }
       
       const response = await client.post("/login", {
         username,
