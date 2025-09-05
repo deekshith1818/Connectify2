@@ -42,7 +42,11 @@ const allowedOrigins = [
   "https://connectify-frontend-cwtvwzw9b-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-4o7f2y4t8-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-f7ybif8d2-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-fkjp7t4z1-deekshith-nanavenis-projects.vercel.app"
+  "https://connectify-frontend-fkjp7t4z1-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-i3fvukxvh-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-oqiuc56up-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-iv258fm4b-deekshith-nanavenis-projects.vercel.app",
+  "https://connectify-frontend-h7qnj1y0i-deekshith-nanavenis-projects.vercel.app",
 ];
 
 // ✅ Proper CORS setup
@@ -56,9 +60,22 @@ app.use(cors({
     return callback(new Error("Not allowed by CORS"));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin"],
+  exposedHeaders: ["Access-Control-Allow-Origin"],
   credentials: true
 }));
+
+// Additional CORS headers for preflight requests
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.status(200).end();
+});
 
 // ✅ API routes
 app.use("/api/v1/users", userRoutes);
