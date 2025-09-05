@@ -24,22 +24,7 @@ const __dirname = path.dirname(__filename);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// CORS Configuration - Simple and permissive for development
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
-
-// ✅ CORS config
+// ✅ Allowed Origins
 const allowedOrigins = [
   "https://connectify2-nj9q.onrender.com",
   "https://connectify3.onrender.com", 
@@ -60,20 +45,34 @@ const allowedOrigins = [
   "https://connectify-frontend-fkjp7t4z1-deekshith-nanavenis-projects.vercel.app"
 ];
 
-// CORS is handled by custom middleware above
+// ✅ Proper CORS setup
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like Postman or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  credentials: true
+}));
 
 // ✅ API routes
 app.use("/api/v1/users", userRoutes);
 
+// Health check
 app.get("/health", (req, res) => {
   res.status(200).json({ 
-    message: "Backend is running", 
+    message: "Backend is running 🚀", 
     timestamp: new Date().toISOString(),
     status: "healthy"
   });
 });
 
-// ✅ Serve React build
+// ✅ Serve React build (if you are bundling frontend here)
 const clientPath = path.join(__dirname, "client", "build");
 app.use(express.static(clientPath));
 
@@ -84,13 +83,20 @@ app.get("/*", (req, res) => {
 
 // ✅ Start server + DB
 const start = async () => {
-  const mongoUri = process.env.MONGODB_URI || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
-  const connectionDb = await mongoose.connect(mongoUri);
-  console.log(`Database connected successfully : ${connectionDb.connection.host}`);
+  try {
+    const mongoUri = process.env.MONGODB_URI 
+      || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
+    
+    const connectionDb = await mongoose.connect(mongoUri);
+    console.log(`✅ Database connected: ${connectionDb.connection.host}`);
 
-  server.listen(app.get("port"), () => {
-    console.log(`Server is running on port ${app.get("port")}`);
-  });
+    server.listen(app.get("port"), () => {
+      console.log(`✅ Server running on port ${app.get("port")}`);
+    });
+  } catch (err) {
+    console.error("❌ Database connection failed:", err.message);
+    process.exit(1);
+  }
 };
 
 start();
