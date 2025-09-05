@@ -11,9 +11,9 @@ const client = axios.create({
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    'Accept': 'application/json'
   },
-  withCredentials: false // Set to false to avoid CORS preflight complexity
+  withCredentials: true // Enable credentials for CORS
 });
 
 // Add request interceptor for debugging
@@ -106,13 +106,6 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log("🔐 Starting login for:", username);
       console.log("🌐 API URL:", `${server}/api/v1/users/login`);
-      
-      // First, try a preflight check
-      // try {
-      //   await axios.options(`${server}/api/v1/users/login`);
-      // } catch (preflightError) {
-      //   console.log("⚠️ Preflight check failed:", preflightError);
-      // }
       
       const response = await client.post("/login", {
         username,
