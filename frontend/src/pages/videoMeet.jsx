@@ -23,6 +23,7 @@ import {
   User,
   LogOut
 } from 'lucide-react';
+import AIAssistant from '../components/AIAssistant';
 import server from '../environment';
 
 const server_url = `${server}`;
@@ -992,6 +993,9 @@ export default function VideoMeetComponent() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* AI Assistant */}
+            <AIAssistant meetingId={socketIdRef.current} />
         </div>
     );
 }

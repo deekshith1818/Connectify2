@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 
 // Import routes and socket manager
 import userRoutes from "./routes/usersRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 import connectToSocket from "./controllers/socketManager.js";
 
 dotenv.config();
@@ -51,18 +52,34 @@ const allowedOrigins = [
 ];
 
 // CORS setup
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
+    
+    // Check if the origin is in the allowed list
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+    
+    // For development, you might want to allow all origins in development
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
     return callback(new Error("Not allowed by CORS"));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin"],
-  credentials: true
-}));
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
+
+// Apply CORS with options
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Initialize Socket.IO
 console.log("🔌 Initializing Socket.IO...");
@@ -80,6 +97,7 @@ app.get("/health", (req, res) => {
 
 // API routes
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/ai", aiRoutes);
 
 // 404 handler for undefined API routes
 app.use((req, res) => {
