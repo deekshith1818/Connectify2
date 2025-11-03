@@ -5,26 +5,29 @@ let connections = {};
 let timeOnline = {};
 
 const connectToSocket = (server) => {
-    // CORS configuration - allow both production and development origins
+    // CORS configuration
     const allowedOrigins = [
         "https://connectify2-nj9q.onrender.com",
         "https://connectify3.onrender.com", 
         "https://connectify2-jhtb.onrender.com",
-        "http://localhost:5173", // Vite dev server
-        "http://localhost:3000"  // Alternative dev port
+        "https://connectify2-cyxk.onrender.com",
+        "http://localhost:5173",
+        "http://localhost:3000"
     ];
 
+    // Create Socket.IO server - IMPORTANT: pass server object properly
     const io = new Server(server, {
         cors: {
             origin: allowedOrigins,
             methods: ["GET", "POST"],
             allowedHeaders: ["*"],
             credentials: true
-        }
+        },
+        transports: ["websocket", "polling"]
     });
 
     io.on("connection", (socket) => {
-        console.log("New client connected:", socket.id);
+        console.log("✅ New client connected:", socket.id);
 
         socket.on("join-call", (path) => {
             if (connections[path] === undefined) {
@@ -37,7 +40,6 @@ const connectToSocket = (server) => {
                 io.to(id).emit("user-joined", socket.id, connections[path]);
             }
 
-            // Fixed typo: 'mesages' -> 'messages'
             if (messages[path] !== undefined) {
                 for (let a = 0; a < messages[path].length; a++) {
                     io.to(socket.id).emit("chat-message", 
@@ -66,8 +68,6 @@ const connectToSocket = (server) => {
                 if (messages[matchingRoom] === undefined) {
                     messages[matchingRoom] = [];
                 }
-                // Fixed: Don't reset messages array to empty
-                // messages[matchingRoom] = []; // <-- This was clearing all previous messages!
                 
                 messages[matchingRoom].push({
                     'sender': sender,
@@ -75,7 +75,7 @@ const connectToSocket = (server) => {
                     "socket-id-sender": socket.id
                 });
                 
-                console.log("message", matchingRoom, ":", sender, data);
+                console.log("💬 Message in", matchingRoom, ":", sender, data);
                 
                 connections[matchingRoom].forEach((ele) => {
                     io.to(ele).emit("chat-message", data, sender, socket.id);
@@ -84,35 +84,29 @@ const connectToSocket = (server) => {
         });
         
         socket.on("disconnect", () => {
-            var diffTime = Math.abs(timeOnline[socket.id] - Date.now());
-            console.log("User disconnected:", socket.id, "Time online:", diffTime + "ms");
+            const diffTime = Math.abs(timeOnline[socket.id] - Date.now());
+            console.log("❌ User disconnected:", socket.id, "Time online:", diffTime + "ms");
 
-            var key;
+            let key;
             for (const [k, v] of Object.entries(connections)) {
                 for (let a = 0; a < v.length; a++) {
                     if (v[a] === socket.id) {
                         key = k;
-                        // Notify other users that this user left
                         for (let i = 0; i < connections[key].length; i++) {
                             io.to(connections[key][i]).emit("user-left", socket.id);
                         }
-                        // Remove user from connections
-                        var index = connections[key].indexOf(socket.id);
+                        const index = connections[key].indexOf(socket.id);
                         connections[key].splice(index, 1);
                         
-                        // Clean up empty room
                         if (connections[key].length === 0) {
                             delete connections[key];
-                            // Optionally clean up messages for empty rooms
-                            // delete messages[key];
                         }
-                        break; // Exit inner loop once user is found and removed
+                        break;
                     }
                 }
-                if (key) break; // Exit outer loop if user was found
+                if (key) break;
             }
             
-            // Clean up timeOnline
             delete timeOnline[socket.id];
         });
     });

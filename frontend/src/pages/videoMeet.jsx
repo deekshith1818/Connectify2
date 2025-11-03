@@ -28,13 +28,97 @@ import server from '../environment';
 const server_url = `${server}`;
 let connections = {};
 
-const peerConfigConnections = {
-    "iceServers": [
-        {
-            "urls": "stun:stun.l.google.com:19302"
+// ✅ FIXED: Remote video component with proper autoplay policy handling
+const RemoteVideo = ({ stream, socketId, index }) => {
+    const videoRef = useRef(null);
+
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            console.log(`🎬 [RemoteVideo ${index}] Setting srcObject for ${socketId}`);
+            console.log(`   Stream ID: ${stream.id}`);
+            console.log(`   Tracks: ${stream.getTracks().length}`);
+            console.log(`   Video tracks: ${stream.getVideoTracks().length}`);
+            console.log(`   Audio tracks: ${stream.getAudioTracks().length}`);
+            
+            // CRITICAL: Set srcObject first
+            videoRef.current.srcObject = stream;
+            
+            // IMPORTANT: Set volume to max (muted attribute doesn't affect audio playback through speakers)
+            videoRef.current.volume = 1.0;
+            
+            // Force play - browsers require user interaction or muted=true for autoplay
+            // Note: muted=true on video element ONLY affects the video element's audio output,
+            // NOT the WebRTC audio that goes through the RTCPeerConnection
+            const playPromise = videoRef.current.play();
+            
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        console.log(`✅ [RemoteVideo ${index}] Video playing for ${socketId}`);
+                    })
+                    .catch(err => {
+                        console.error(`❌ [RemoteVideo ${index}] Autoplay failed:`, err.message);
+                        // If autoplay fails, the video will still show once user interacts
+                        console.log('   💡 Tip: User interaction may be required for autoplay');
+                    });
+            }
+        } else {
+            console.warn(`⚠️ [RemoteVideo ${index}] No ref or stream:`, {
+                hasRef: !!videoRef.current,
+                hasStream: !!stream,
+                socketId
+            });
         }
-    ]
-}
+        
+        // Cleanup function
+        return () => {
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+            }
+        };
+    }, [stream, socketId, index]);
+
+    return (
+        <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={true}
+            className="w-full h-full object-cover"
+            style={{ backgroundColor: '#1e293b' }}
+        />
+    );
+};
+
+// ✅ FIXED: Added TURN servers for production
+const peerConfigConnections = {
+    iceServers: [
+        // STUN servers - for NAT discovery
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        
+        // TURN servers - CRITICAL for production (relays traffic through NAT/firewalls)
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
+    ],
+    iceCandidatePoolSize: 10
+};
 
 export default function VideoMeetComponent() {
     const socketRef = useRef();
@@ -83,8 +167,9 @@ export default function VideoMeetComponent() {
                 const videoPermission = await navigator.mediaDevices.getUserMedia({ video: true });
                 videoPermission.getTracks().forEach(track => track.stop());
                 setVideoAvailable(true);
+                console.log('✅ Video permission granted');
             } catch (e) {
-                console.log("Video not available:", e);
+                console.log("❌ Video not available:", e);
                 setVideoAvailable(false);
             }
 
@@ -93,29 +178,37 @@ export default function VideoMeetComponent() {
                 const audioPermission = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioPermission.getTracks().forEach(track => track.stop());
                 setAudioAvailable(true);
+                console.log('✅ Audio permission granted');
             } catch (e) {
-                console.log("Audio not available:", e);
+                console.log("❌ Audio not available:", e);
                 setAudioAvailable(false);
             }
 
             // Check screen share availability
             if (navigator.mediaDevices.getDisplayMedia) {
                 setScreenAvailable(true);
+                console.log('✅ Screen share available');
             } else {
                 setScreenAvailable(false);
+                console.log('❌ Screen share not available');
             }
 
         } catch (error) {
-            console.log("Error getting permissions:", error);
+            console.error("❌ Error getting permissions:", error);
         }
     }, []);
 
     // Get user media stream
     const getUserMedia = useCallback(async () => {
         try {
+            console.log('🎥 Getting user media... Video:', video, 'Audio:', audio);
+            
             // Stop existing tracks
             if (window.localStream) {
-                window.localStream.getTracks().forEach(track => track.stop());
+                window.localStream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('🛑 Stopped track:', track.kind);
+                });
             }
 
             let stream;
@@ -124,20 +217,25 @@ export default function VideoMeetComponent() {
                     video: video && videoAvailable,
                     audio: audio && audioAvailable
                 });
+                console.log('✅ Got user media stream with', stream.getTracks().length, 'tracks');
             } else {
                 // Create black silence stream
                 let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
                 stream = blackSilence();
+                console.log('📺 Created black/silence stream');
             }
 
             window.localStream = stream;
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
+                console.log('✅ Set local video srcObject');
             }
 
             // Update peer connections
             for (let id in connections) {
                 if (id === socketIdRef.current) continue;
+                
+                console.log('🔄 Updating peer connection for', id);
                 
                 // Remove old stream
                 const senders = connections[id].getSenders();
@@ -150,17 +248,20 @@ export default function VideoMeetComponent() {
                 // Add new stream
                 stream.getTracks().forEach(track => {
                     connections[id].addTrack(track, stream);
+                    console.log('➕ Added track to peer:', track.kind);
                 });
 
                 // Create offer
                 const description = await connections[id].createOffer();
                 await connections[id].setLocalDescription(description);
                 socketRef.current.emit("signal", id, JSON.stringify({ "sdp": connections[id].localDescription }));
+                console.log('📤 Sent updated offer to', id);
             }
 
             // Handle track ended
             stream.getTracks().forEach(track => {
                 track.onended = () => {
+                    console.log('🛑 Track ended:', track.kind);
                     setVideo(false);
                     setAudio(false);
                     getUserMedia();
@@ -168,7 +269,7 @@ export default function VideoMeetComponent() {
             });
 
         } catch (error) {
-            console.error("Error accessing media devices:", error);
+            console.error("❌ Error accessing media devices:", error);
         }
     }, [video, audio, videoAvailable, audioAvailable, black, silence]);
 
@@ -176,6 +277,7 @@ export default function VideoMeetComponent() {
     const getDisplayMedia = useCallback(async () => {
         if (screen && navigator.mediaDevices.getDisplayMedia) {
             try {
+                console.log('🖥️ Getting display media...');
                 const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
                 
                 // Stop existing tracks
@@ -187,6 +289,8 @@ export default function VideoMeetComponent() {
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = stream;
                 }
+
+                console.log('✅ Screen sharing started');
 
                 // Update peer connections
                 for (let id in connections) {
@@ -211,13 +315,14 @@ export default function VideoMeetComponent() {
 
                 stream.getTracks().forEach(track => {
                     track.onended = () => {
+                        console.log('🛑 Screen share ended');
                         setScreen(false);
                         getUserMedia();
                     };
                 });
 
             } catch (error) {
-                console.log("Error sharing screen:", error);
+                console.error("❌ Error sharing screen:", error);
                 setScreen(false);
             }
         }
@@ -225,25 +330,32 @@ export default function VideoMeetComponent() {
 
     // Handle signaling messages
     const gotMessageFromServer = useCallback(async (fromId, message) => {
+        console.log('📥 Got message from server. From:', fromId, 'Type:', JSON.parse(message).sdp?.type || 'ICE');
+        
         const signal = JSON.parse(message);
         if (fromId !== socketIdRef.current) {
             if (signal.sdp) {
                 try {
+                    console.log('📨 Processing SDP:', signal.sdp.type);
                     await connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    console.log('✅ Set remote description for', fromId);
+                    
                     if (signal.sdp.type === "offer") {
                         const description = await connections[fromId].createAnswer();
                         await connections[fromId].setLocalDescription(description);
                         socketRef.current.emit("signal", fromId, JSON.stringify({ "sdp": connections[fromId].localDescription }));
+                        console.log('📤 Sent answer to', fromId);
                     }
                 } catch (e) {
-                    console.log("Error handling SDP:", e);
+                    console.error("❌ Error handling SDP:", e);
                 }
             }
             if (signal.ice) {
                 try {
                     await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
+                    console.log('🧊 Added ICE candidate from', fromId);
                 } catch (e) {
-                    console.log("Error adding ICE candidate:", e);
+                    console.error("❌ Error adding ICE candidate:", e);
                 }
             }
         }
@@ -251,6 +363,8 @@ export default function VideoMeetComponent() {
 
     // Connect to socket server
     const connectToSocketServer = useCallback(() => {
+        console.log('🔌 Connecting to socket server:', server_url);
+        
         const isSecure = server_url.startsWith('https');
         socketRef.current = io.connect(server_url, { 
             secure: isSecure,
@@ -259,18 +373,20 @@ export default function VideoMeetComponent() {
         });
         
         socketRef.current.on('connect_error', (error) => {
-            console.error('Socket connection error:', error);
+            console.error('❌ Socket connection error:', error);
         });
         
         socketRef.current.on('signal', gotMessageFromServer);
         
         socketRef.current.on("connect", () => {
+            console.log('✅ Socket connected. ID:', socketRef.current.id);
             socketRef.current.emit("join-call", window.location.href);
             socketIdRef.current = socketRef.current.id;
             
             socketRef.current.on("chat-message", addMessage);
 
             socketRef.current.on("user-left", (id) => {
+                console.log('👋 User left:', id);
                 setVideos((videos) => videos.filter((video) => video.socketId !== id));
                 setParticipants((participants) => participants.filter((p) => p.socketId !== id));
                 if (connections[id]) {
@@ -280,6 +396,8 @@ export default function VideoMeetComponent() {
             });
 
             socketRef.current.on("user-joined", (id, clients) => {
+                console.log('👤 User joined. ID:', id, 'Total clients:', clients.length);
+                
                 // Add current user to participants
                 setParticipants(prev => {
                     const currentUser = prev.find(p => p.socketId === socketIdRef.current);
@@ -297,32 +415,95 @@ export default function VideoMeetComponent() {
 
                 clients.forEach((socketListId) => {
                     if (!connections[socketListId]) {
+                        console.log('🔗 Creating peer connection for', socketListId);
                         connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
                         
+                        // ✅ ADDED: ICE candidate handler
                         connections[socketListId].onicecandidate = (event) => {
                             if (event.candidate !== null) {
+                                console.log('🧊 Sending ICE candidate to', socketListId);
                                 socketRef.current.emit("signal", socketListId, JSON.stringify({ 'ice': event.candidate }));
                             }
                         };
 
+                        // ✅ ADDED: Connection state monitoring
+                        connections[socketListId].oniceconnectionstatechange = () => {
+                            console.log(`🔌 ICE Connection State (${socketListId}):`, 
+                                connections[socketListId].iceConnectionState
+                            );
+                            
+                            // Restart ICE if failed
+                            if (connections[socketListId].iceConnectionState === 'failed') {
+                                console.error('❌ ICE failed, attempting restart...');
+                                connections[socketListId].restartIce();
+                            }
+                        };
+
+                        connections[socketListId].onconnectionstatechange = () => {
+                            console.log(`🔗 Connection State (${socketListId}):`, 
+                                connections[socketListId].connectionState
+                            );
+                        };
+
+                        connections[socketListId].onsignalingstatechange = () => {
+                            console.log(`📡 Signaling State (${socketListId}):`, 
+                                connections[socketListId].signalingState
+                            );
+                        };
+
+                        // ✅ IMPROVED: Track handler with detailed logging and proper stream handling
                         connections[socketListId].ontrack = (event) => {
+                            console.log('📹 Remote track received from', socketListId);
+                            console.log('  - Track kind:', event.track.kind);
+                            console.log('  - Track enabled:', event.track.enabled);
+                            console.log('  - Track muted:', event.track.muted);
+                            console.log('  - Track readyState:', event.track.readyState);
+                            console.log('  - Streams count:', event.streams.length);
+                            
+                            if (event.streams.length === 0) {
+                                console.error('❌ No streams in track event!');
+                                return;
+                            }
+                            
                             const remoteStream = event.streams[0];
+                            console.log('✅ Stream details:', {
+                                id: remoteStream.id,
+                                active: remoteStream.active,
+                                tracks: remoteStream.getTracks().length,
+                                videoTracks: remoteStream.getVideoTracks().length,
+                                audioTracks: remoteStream.getAudioTracks().length
+                            });
+                            
+                            // Check if video track is enabled
+                            const videoTrack = remoteStream.getVideoTracks()[0];
+                            if (videoTrack) {
+                                console.log('  - Video track enabled:', videoTrack.enabled);
+                                console.log('  - Video track muted:', videoTrack.muted);
+                                console.log('  - Video track readyState:', videoTrack.readyState);
+                            } else {
+                                console.warn('⚠️ No video track in stream!');
+                            }
+                            
                             setVideos(videos => {
                                 const videoExists = videos.find(video => video.socketId === socketListId);
                                 if (videoExists) {
+                                    console.log('🔄 Updating existing video for', socketListId);
                                     return videos.map(video =>
                                         video.socketId === socketListId
                                             ? { ...video, stream: remoteStream }
                                             : video
                                     );
                                 } else {
+                                    console.log('➕ Adding new video for', socketListId);
                                     const newVideo = {
                                         socketId: socketListId,
                                         stream: remoteStream,
                                         autoPlay: true,
                                         playsInline: true
                                     };
-                                    return [...videos, newVideo];
+                                    const updatedVideos = [...videos, newVideo];
+                                    console.log('  - Total videos now:', updatedVideos.length);
+                                    return updatedVideos;
                                 }
                             });
 
@@ -342,25 +523,32 @@ export default function VideoMeetComponent() {
                             });
                         };
 
+                        // Add local stream tracks
                         if (window.localStream) {
+                            console.log('➕ Adding local stream tracks to peer', socketListId);
                             window.localStream.getTracks().forEach(track => {
                                 connections[socketListId].addTrack(track, window.localStream);
+                                console.log('  - Added', track.kind, 'track');
                             });
+                        } else {
+                            console.warn('⚠️ No local stream available yet');
                         }
                     }
                 });
 
                 if (id === socketIdRef.current) {
+                    console.log('🤝 Creating offers for all peers');
                     for (let id2 in connections) {
                         if (id2 === socketIdRef.current) continue;
 
                         connections[id2].createOffer().then((description) => {
                             connections[id2].setLocalDescription(description)
                                 .then(() => {
+                                    console.log('📤 Sending offer to', id2);
                                     socketRef.current.emit("signal", id2, JSON.stringify({ "sdp": connections[id2].localDescription }));
                                 })
-                                .catch(e => console.log(e));
-                        });
+                                .catch(e => console.error('❌ Error setting local description:', e));
+                        }).catch(e => console.error('❌ Error creating offer:', e));
                     }
                 }
             });
@@ -368,11 +556,50 @@ export default function VideoMeetComponent() {
     }, [gotMessageFromServer, username, audio, video]);
 
     // Initialize media and connect
-    const getMedia = useCallback(() => {
-        setVideo(videoAvailable);
-        setAudio(audioAvailable);
-        connectToSocketServer();
-    }, [videoAvailable, audioAvailable, connectToSocketServer]);
+    const getMedia = useCallback(async () => {
+        console.log('🎬 getMedia called - Getting local stream first...');
+        
+        // CRITICAL FIX: Get local media stream BEFORE connecting to socket
+        // This ensures window.localStream exists when peer connections are created
+        try {
+            // Set states first
+            setVideo(videoAvailable);
+            setAudio(audioAvailable);
+            
+            // Get the media stream
+            let stream;
+            if (videoAvailable || audioAvailable) {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: videoAvailable,
+                    audio: audioAvailable
+                });
+                console.log('✅ Got initial user media:', {
+                    video: videoAvailable,
+                    audio: audioAvailable,
+                    tracks: stream.getTracks().length
+                });
+            } else {
+                // Create black silence stream
+                let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+                stream = blackSilence();
+                console.log('📺 Created black/silence stream (no permissions)');
+            }
+            
+            window.localStream = stream;
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = stream;
+            }
+            
+            console.log('✅ Local stream ready, now connecting to socket...');
+            // Now connect to socket server with stream ready
+            connectToSocketServer();
+            
+        } catch (error) {
+            console.error('❌ Error getting initial media:', error);
+            // Still connect even if media fails
+            connectToSocketServer();
+        }
+    }, [videoAvailable, audioAvailable, connectToSocketServer, black, silence]);
 
     // Send chat message
     const sendMessage = useCallback(() => {
@@ -384,25 +611,32 @@ export default function VideoMeetComponent() {
 
     // Handle end call
     const handleEndCall = useCallback(() => {
+        console.log('📞 Ending call...');
         try {
             if (window.localStream) {
-                window.localStream.getTracks().forEach(track => track.stop());
+                window.localStream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('🛑 Stopped local track:', track.kind);
+                });
             }
             for (let id in connections) {
                 connections[id].close();
+                console.log('🔌 Closed connection:', id);
             }
             connections = {};
             if (socketRef.current) {
                 socketRef.current.disconnect();
+                console.log('🔌 Socket disconnected');
             }
         } catch (e) {
-            console.log("Error ending call:", e);
+            console.error("❌ Error ending call:", e);
         }
         window.location.href = "/home";
     }, []);
 
     // Add message to chat
     const addMessage = useCallback((data, sender, socketIdSender) => {
+        console.log('💬 New message from', sender);
         setMessages((prevMessages) => [
             ...prevMessages,
             { sender: sender, data: data }
@@ -415,6 +649,7 @@ export default function VideoMeetComponent() {
     // Connect to meeting
     const connect = useCallback(() => {
         if (username.trim()) {
+            console.log('👤 Joining as:', username);
             setAskForUsername(false);
             getMedia();
         }
@@ -422,6 +657,7 @@ export default function VideoMeetComponent() {
 
     // Toggle video
     const handleVideo = useCallback(() => {
+        console.log('📹 Toggling video:', !video);
         setVideo(!video);
         setParticipants(prev => prev.map(p => 
             p.isLocal ? { ...p, isVideoOff: !video } : p
@@ -430,6 +666,7 @@ export default function VideoMeetComponent() {
 
     // Toggle audio
     const handleAudio = useCallback(() => {
+        console.log('🎤 Toggling audio:', !audio);
         setAudio(!audio);
         setParticipants(prev => prev.map(p => 
             p.isLocal ? { ...p, isMuted: !audio } : p
@@ -438,6 +675,7 @@ export default function VideoMeetComponent() {
 
     // Toggle screen sharing
     const handleScreen = useCallback(() => {
+        console.log('🖥️ Toggling screen share:', !screen);
         setScreen(!screen);
     }, [screen]);
 
@@ -458,11 +696,14 @@ export default function VideoMeetComponent() {
 
     // Effects
     useEffect(() => {
+        console.log('🚀 Component mounted, getting permissions...');
         getPermissions();
     }, [getPermissions]);
 
     useEffect(() => {
-        if (video !== undefined && audio !== undefined) {
+        // Only update media after initial setup (when socket is connected)
+        if (video !== undefined && audio !== undefined && socketRef.current?.connected) {
+            console.log('🔄 Video/Audio toggled, updating media streams...');
             getUserMedia();
         }
     }, [video, audio, getUserMedia]);
@@ -472,6 +713,19 @@ export default function VideoMeetComponent() {
             getDisplayMedia();
         }
     }, [screen, getDisplayMedia]);
+
+    // ✅ NEW: Debug effect to monitor videos state
+    useEffect(() => {
+        console.log('📊 Videos state updated:', {
+            count: videos.length,
+            videos: videos.map(v => ({
+                socketId: v.socketId.slice(-4),
+                hasStream: !!v.stream,
+                streamActive: v.stream?.active,
+                trackCount: v.stream?.getTracks().length
+            }))
+        });
+    }, [videos]);
 
     if (askForUsername) {
         return (
@@ -582,6 +836,7 @@ export default function VideoMeetComponent() {
                                 ref={localVideoRef}
                                 autoPlay
                                 muted
+                                playsInline
                                 className="w-full h-full object-cover"
                             />
                             <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
@@ -589,19 +844,13 @@ export default function VideoMeetComponent() {
                             </div>
                         </div>
 
-                        {/* Remote Videos */}
-                        {videos.map((video) => (
+                        {/* Remote Videos - ✅ IMPROVED FIX */}
+                        {videos.map((video, index) => (
                             <div key={video.socketId} className="relative bg-slate-800 rounded-xl overflow-hidden">
-                                <video
-                                    data-socket={video.socketId}
-                                    ref={(ref) => {
-                                        if (ref && video.stream) {
-                                            ref.srcObject = video.stream;
-                                        }
-                                    }}
-                                    autoPlay
-                                    playsInline
-                                    className="w-full h-full object-cover"
+                                <RemoteVideo 
+                                    stream={video.stream} 
+                                    socketId={video.socketId}
+                                    index={index}
                                 />
                                 <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
                                     <span className="text-white text-sm">User {video.socketId.slice(-4)}</span>

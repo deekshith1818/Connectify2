@@ -1,20 +1,20 @@
 import express from "express";
 import { createServer } from "node:http";
-import { Server } from "socket.io";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import connectToSocket from "./controllers/socketManager.js";
+// Import routes and socket manager
 import userRoutes from "./routes/usersRoutes.js";
+import connectToSocket from "./controllers/socketManager.js";
 
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
-const io = connectToSocket(server);
+
 app.set("port", process.env.PORT || 8000);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// ✅ Allowed Origins
+// Allowed Origins
 const allowedOrigins = [
   "https://connectify2-nj9q.onrender.com",
   "https://connectify3.onrender.com", 
@@ -50,10 +50,9 @@ const allowedOrigins = [
   "https://connectify-frontend-iota.vercel.app",
 ];
 
-// ✅ Proper CORS setup
+// CORS setup
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like Postman or curl)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
@@ -62,24 +61,13 @@ app.use(cors({
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin"],
-  exposedHeaders: ["Access-Control-Allow-Origin"],
   credentials: true
 }));
 
-// Additional CORS headers for preflight requests
-app.options('*', (req, res) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-  res.status(200).end();
-});
-
-// ✅ API routes
-app.use("/api/v1/users", userRoutes);
+// Initialize Socket.IO
+console.log("🔌 Initializing Socket.IO...");
+const io = connectToSocket(server);
+console.log("✅ Socket.IO initialized");
 
 // Health check
 app.get("/health", (req, res) => {
@@ -90,21 +78,25 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ✅ Serve React build (if you are bundling frontend here)
-const clientPath = path.join(__dirname, "client", "build");
-app.use(express.static(clientPath));
+// API routes
+app.use("/api/v1/users", userRoutes);
 
-// Catch-all for React Router
-app.get("/*", (req, res) => {
-  res.sendFile(path.join(clientPath, "index.html"));
+// 404 handler for undefined API routes
+app.use((req, res) => {
+  res.status(404).json({ 
+    success: false,
+    message: "Route not found",
+    path: req.path 
+  });
 });
 
-// ✅ Start server + DB
+// Start server
 const start = async () => {
   try {
     const mongoUri = process.env.MONGODB_URI 
       || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
     
+    console.log("📊 Connecting to MongoDB...");
     const connectionDb = await mongoose.connect(mongoUri);
     console.log(`✅ Database connected: ${connectionDb.connection.host}`);
 
@@ -112,7 +104,7 @@ const start = async () => {
       console.log(`✅ Server running on port ${app.get("port")}`);
     });
   } catch (err) {
-    console.error("❌ Database connection failed:", err.message);
+    console.error("❌ Error:", err.message);
     process.exit(1);
   }
 };
