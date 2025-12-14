@@ -1,11 +1,6 @@
 import React from "react";
-import SignInSide from "../sign-in-side/SignInSide.jsx";
+import TravelConnectSignIn from "../components/ui/travel-connect-signin";
 
 export default function AuthenticationPage() {
-  return (
-    <>
-      <SignInSide disableCustomTheme />
-      
-    </>
-  );
+  return <TravelConnectSignIn />;
 }

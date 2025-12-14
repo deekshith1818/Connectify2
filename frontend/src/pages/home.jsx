@@ -11,26 +11,56 @@ import {
   LogOut, 
   Settings, 
   Plus,
-  Calendar,
   Clock,
-  TrendingUp
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 function HomeComponent() {
     const navigate = useNavigate();
     const [meetingCode, setMeetingCode] = useState("");
-    const { addToUserHistory, userData } = useContext(AuthContext);
+    const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const { addToUserHistory, userData, startMeeting, validateMeeting } = useContext(AuthContext);
 
+    // Join an existing meeting with validation
     const handleJoinVideoCall = async () => {
-        if (meetingCode.trim()) {
+        if (!meetingCode.trim()) return;
+        
+        setError("");
+        setIsLoading(true);
+        
+        try {
+            // Validate meeting code first
+            await validateMeeting(meetingCode);
+            // If valid, add to history and navigate
             await addToUserHistory(meetingCode);
-            navigate(`/${meetingCode}`);
+            navigate(`/${meetingCode.toUpperCase()}`);
+        } catch (err) {
+            console.error("Join meeting error:", err);
+            setError(err.message || "Invalid or expired meeting code");
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleCreateMeeting = () => {
-        const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        setMeetingCode(randomCode);
+    // Start a new meeting (Host creates room in DB)
+    const handleStartMeeting = async () => {
+        setError("");
+        setIsLoading(true);
+        
+        try {
+            // Create meeting in DB and get code
+            const newCode = await startMeeting();
+            // Add to history and navigate
+            await addToUserHistory(newCode);
+            navigate(`/${newCode}`);
+        } catch (err) {
+            console.error("Start meeting error:", err);
+            setError(err.message || "Failed to create meeting");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const stats = [
@@ -160,6 +190,14 @@ function HomeComponent() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            {/* Error Message */}
+                            {error && (
+                                <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400">
+                                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                                    <span className="text-sm">{error}</span>
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                                     Meeting Code
@@ -168,37 +206,43 @@ function HomeComponent() {
                                     <input
                                         type="text"
                                         value={meetingCode}
-                                        onChange={(e) => setMeetingCode(e.target.value.toUpperCase())}
+                                        onChange={(e) => {
+                                            setMeetingCode(e.target.value.toUpperCase());
+                                            setError(""); // Clear error on input change
+                                        }}
                                         placeholder="Enter meeting code"
                                         className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        disabled={isLoading}
                                     />
-                                    <Button
-                                        onClick={handleCreateMeeting}
-                                        variant="outline"
-                                        className="px-4"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
                                 </div>
                             </div>
                             
                             <div className="flex space-x-3">
                                 <Button
                                     onClick={handleJoinVideoCall}
-                                    disabled={!meetingCode.trim()}
+                                    disabled={!meetingCode.trim() || isLoading}
                                     className="flex-1"
                                 >
-                                    <Video className="mr-2 h-4 w-4" />
+                                    {isLoading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Video className="mr-2 h-4 w-4" />
+                                    )}
                                     Join Meeting
                                 </Button>
                                 
                                 <Button
                                     variant="outline"
-                                    onClick={() => navigate("/43423")}
+                                    onClick={handleStartMeeting}
+                                    disabled={isLoading}
                                     className="flex-1"
                                 >
-                                    <Users className="mr-2 h-4 w-4" />
-                                    Join as Guest
+                                    {isLoading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="mr-2 h-4 w-4" />
+                                    )}
+                                    Start Instant Meeting
                                 </Button>
                             </div>
                         </CardContent>
@@ -223,7 +267,6 @@ function HomeComponent() {
                                         className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                                         onClick={() => {
                                             setMeetingCode(meeting.code);
-                                            navigate(`/${meeting.code}`);
                                         }}
                                     >
                                         <div className="flex items-center space-x-3">
@@ -276,7 +319,8 @@ function HomeComponent() {
                                 <Button
                                     variant="outline"
                                     className="h-20 flex-col space-y-2"
-                                    onClick={handleCreateMeeting}
+                                    onClick={handleStartMeeting}
+                                    disabled={isLoading}
                                 >
                                     <Plus className="h-6 w-6" />
                                     <span className="text-sm">New Meeting</span>
@@ -294,10 +338,9 @@ function HomeComponent() {
                                 <Button
                                     variant="outline"
                                     className="h-20 flex-col space-y-2"
-                                    onClick={() => navigate("/43423")}
                                 >
                                     <Users className="h-6 w-6" />
-                                    <span className="text-sm">Join as Guest</span>
+                                    <span className="text-sm">Invite Team</span>
                                 </Button>
                                 
                                 <Button

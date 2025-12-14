@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 // Import routes and socket manager
 import userRoutes from "./routes/usersRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
+import meetingRoutes from "./routes/meetingRoutes.js";
 import connectToSocket from "./controllers/socketManager.js";
 
 dotenv.config();
@@ -28,10 +29,12 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // Allowed Origins
 const allowedOrigins = [
   "https://connectify2-nj9q.onrender.com",
-  "https://connectify3.onrender.com", 
+  "https://connectify3.onrender.com",
   "https://connectify2-jhtb.onrender.com",
   "https://connectify2-cyxk.onrender.com",
-  "http://localhost:5173", 
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
   "http://localhost:3000",
   "https://connectify-frontend-d62v0shob-deekshith-nanavenis-projects.vercel.app",
   "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app",
@@ -56,17 +59,17 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     // Check if the origin is in the allowed list
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
+
     // For development, you might want to allow all origins in development
     if (process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
-    
+
     return callback(new Error("Not allowed by CORS"));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -88,8 +91,8 @@ console.log("✅ Socket.IO initialized");
 
 // Health check
 app.get("/health", (req, res) => {
-  res.status(200).json({ 
-    message: "Backend is running 🚀", 
+  res.status(200).json({
+    message: "Backend is running 🚀",
     timestamp: new Date().toISOString(),
     status: "healthy"
   });
@@ -98,22 +101,23 @@ app.get("/health", (req, res) => {
 // API routes
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/meetings", meetingRoutes);
 
 // 404 handler for undefined API routes
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     success: false,
     message: "Route not found",
-    path: req.path 
+    path: req.path
   });
 });
 
 // Start server
 const start = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI 
+    const mongoUri = process.env.MONGODB_URI
       || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
-    
+
     console.log("📊 Connecting to MongoDB...");
     const connectionDb = await mongoose.connect(mongoUri);
     console.log(`✅ Database connected: ${connectionDb.connection.host}`);

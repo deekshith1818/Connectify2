@@ -1,20 +1,39 @@
-import {Schema} from 'mongoose';
+import { Schema } from 'mongoose';
 import mongoose from 'mongoose';
 
-const meetingSchema=new Schema({
-    user_id:{
-        type:String
+const meetingSchema = new Schema({
+    meetingCode: {
+        type: String,
+        required: true,
+        index: true
     },
-    meetingCode:{
-        type:String,
-        required:true
+    hostId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: false  // Make optional for backward compatibility
     },
-    date:{
-        type:Date,
-        default:Date.now,
-        required:true
+    // Keep old field for backward compatibility with existing data
+    user_id: {
+        type: String,
+        required: false
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    // Also support old 'date' field name
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    isActive: {
+        type: Boolean,
+        default: true
     }
-})
+});
 
-const Meeting=new mongoose.model("Meeting",meetingSchema);
-export {Meeting}
+// Compound index for faster lookups
+meetingSchema.index({ meetingCode: 1, isActive: 1 });
+
+const Meeting = mongoose.model("Meeting", meetingSchema);
+export { Meeting };

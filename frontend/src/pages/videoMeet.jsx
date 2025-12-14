@@ -21,9 +21,12 @@ import {
   Volume2,
   VolumeX,
   User,
-  LogOut
+  LogOut,
+  Pencil
 } from 'lucide-react';
 import AIAssistant from '../components/AIAssistant';
+import Whiteboard from '../components/Whiteboard';
+import Lobby from '../components/Lobby';
 import server from '../environment';
 
 const server_url = `${server}`;
@@ -142,6 +145,10 @@ export default function VideoMeetComponent() {
     const [videos, setVideos] = useState([]);
     const [showParticipants, setShowParticipants] = useState(false);
     const [participants, setParticipants] = useState([]);
+    const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
+    const [lobbyStream, setLobbyStream] = useState(null);  // Stream for lobby preview
+    const [isLobbyAudioEnabled, setIsLobbyAudioEnabled] = useState(true);
+    const [isLobbyVideoEnabled, setIsLobbyVideoEnabled] = useState(true);
 
     // Helper functions for black video and silence audio
     const silence = useCallback(() => {
@@ -385,6 +392,12 @@ export default function VideoMeetComponent() {
             socketIdRef.current = socketRef.current.id;
             
             socketRef.current.on("chat-message", addMessage);
+
+            // Whiteboard sync event
+            socketRef.current.on("toggle-whiteboard", ({ isOpen }) => {
+                console.log('📋 Remote whiteboard toggle:', isOpen);
+                setIsWhiteboardOpen(isOpen);
+            });
 
             socketRef.current.on("user-left", (id) => {
                 console.log('👋 User left:', id);
@@ -647,14 +660,32 @@ export default function VideoMeetComponent() {
         } 
     }, []);
 
-    // Connect to meeting
+    // Connect to meeting - uses existing lobby stream
     const connect = useCallback(() => {
         if (username.trim()) {
             console.log('👤 Joining as:', username);
             setAskForUsername(false);
-            getMedia();
+            
+            // Use the existing lobby stream instead of requesting new media
+            if (lobbyStream) {
+                console.log('🔄 Using existing lobby stream for meeting');
+                window.localStream = lobbyStream;
+                if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = lobbyStream;
+                }
+                
+                // Set video/audio states based on lobby settings
+                setVideo(isLobbyVideoEnabled);
+                setAudio(isLobbyAudioEnabled);
+                
+                // Connect to socket with stream already available
+                connectToSocketServer();
+            } else {
+                // Fallback: get new media if lobby stream not available
+                getMedia();
+            }
         }
-    }, [username, getMedia]);
+    }, [username, lobbyStream, isLobbyVideoEnabled, isLobbyAudioEnabled, connectToSocketServer, getMedia]);
 
     // Toggle video
     const handleVideo = useCallback(() => {
@@ -688,12 +719,45 @@ export default function VideoMeetComponent() {
         }
     }, [showModal]);
 
+    // Toggle whiteboard
+    const handleWhiteboard = useCallback(() => {
+        const newState = !isWhiteboardOpen;
+        setIsWhiteboardOpen(newState);
+        console.log('📋 Toggling whiteboard:', newState);
+        socketRef.current?.emit("toggle-whiteboard", { 
+            roomId: window.location.href, 
+            isOpen: newState 
+        });
+    }, [isWhiteboardOpen]);
+
     // Handle Enter key in message input
     const handleKeyPress = useCallback((e) => {
         if (e.key === 'Enter') {
             sendMessage();
         }
     }, [sendMessage]);
+
+    // Toggle lobby audio
+    const toggleLobbyAudio = useCallback(() => {
+        if (lobbyStream) {
+            lobbyStream.getAudioTracks().forEach(track => {
+                track.enabled = !isLobbyAudioEnabled;
+            });
+            setIsLobbyAudioEnabled(!isLobbyAudioEnabled);
+            console.log('🎤 Lobby audio toggled:', !isLobbyAudioEnabled);
+        }
+    }, [lobbyStream, isLobbyAudioEnabled]);
+
+    // Toggle lobby video
+    const toggleLobbyVideo = useCallback(() => {
+        if (lobbyStream) {
+            lobbyStream.getVideoTracks().forEach(track => {
+                track.enabled = !isLobbyVideoEnabled;
+            });
+            setIsLobbyVideoEnabled(!isLobbyVideoEnabled);
+            console.log('📹 Lobby video toggled:', !isLobbyVideoEnabled);
+        }
+    }, [lobbyStream, isLobbyVideoEnabled]);
 
     // Effects
     useEffect(() => {
@@ -728,35 +792,61 @@ export default function VideoMeetComponent() {
         });
     }, [videos]);
 
+    // Initialize lobby stream on mount
+    useEffect(() => {
+        const initLobbyStream = async () => {
+            if (askForUsername && !lobbyStream) {
+                console.log('🎬 Initializing lobby stream...');
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: true
+                    });
+                    setLobbyStream(stream);
+                    console.log('✅ Lobby stream ready');
+                } catch (error) {
+                    console.error('❌ Error getting lobby stream:', error);
+                    // Try video only
+                    try {
+                        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        setLobbyStream(videoStream);
+                        setIsLobbyAudioEnabled(false);
+                    } catch (videoError) {
+                        console.error('❌ Video also failed:', videoError);
+                    }
+                }
+            }
+        };
+        initLobbyStream();
+        
+        // Cleanup on unmount
+        return () => {
+            if (lobbyStream && askForUsername) {
+                // Only cleanup if still in lobby
+                lobbyStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [askForUsername]);
+
+    // Get meeting code from URL
+    const getMeetingCode = () => {
+        const path = window.location.pathname;
+        return path.split('/').pop() || 'Unknown';
+    };
+
     if (askForUsername) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-2xl">Join Meeting</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Your Name</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && connect()}
-                                placeholder="Enter your name"
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                        <Button 
-                            onClick={connect} 
-                            disabled={!username.trim()}
-                            className="w-full"
-                        >
-                            Join Meeting
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
+            <Lobby
+                stream={lobbyStream}
+                onJoin={connect}
+                username={username}
+                setUsername={setUsername}
+                isAudioEnabled={isLobbyAudioEnabled}
+                isVideoEnabled={isLobbyVideoEnabled}
+                toggleAudio={toggleLobbyAudio}
+                toggleVideo={toggleLobbyVideo}
+                meetingCode={getMeetingCode()}
+            />
         );
     }
 
@@ -828,37 +918,48 @@ export default function VideoMeetComponent() {
                     </div>
                 </div>
 
-                {/* Video Grid */}
+                {/* Video Grid or Whiteboard */}
                 <div className="flex-1 relative bg-slate-900 p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 h-full">
-                        {/* Local Video */}
-                        <div className="relative bg-slate-800 rounded-xl overflow-hidden">
-                            <video
-                                ref={localVideoRef}
-                                autoPlay
-                                muted
-                                playsInline
-                                className="w-full h-full object-cover"
+                    {isWhiteboardOpen ? (
+                        /* Whiteboard View */
+                        <div className="h-full">
+                            <Whiteboard 
+                                socket={socketRef.current} 
+                                roomId={window.location.href} 
                             />
-                            <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
-                                <span className="text-white text-sm">{username} (You)</span>
-                            </div>
                         </div>
-
-                        {/* Remote Videos - ✅ IMPROVED FIX */}
-                        {videos.map((video, index) => (
-                            <div key={video.socketId} className="relative bg-slate-800 rounded-xl overflow-hidden">
-                                <RemoteVideo 
-                                    stream={video.stream} 
-                                    socketId={video.socketId}
-                                    index={index}
+                    ) : (
+                        /* Video Grid */
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 h-full">
+                            {/* Local Video */}
+                            <div className="relative bg-slate-800 rounded-xl overflow-hidden">
+                                <video
+                                    ref={localVideoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
                                 />
                                 <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
-                                    <span className="text-white text-sm">User {video.socketId.slice(-4)}</span>
+                                    <span className="text-white text-sm">{username} (You)</span>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+
+                            {/* Remote Videos */}
+                            {videos.map((video, index) => (
+                                <div key={video.socketId} className="relative bg-slate-800 rounded-xl overflow-hidden">
+                                    <RemoteVideo 
+                                        stream={video.stream} 
+                                        socketId={video.socketId}
+                                        index={index}
+                                    />
+                                    <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
+                                        <span className="text-white text-sm">User {video.socketId.slice(-4)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Chat Modal */}
                     {showModal && (
@@ -939,6 +1040,17 @@ export default function VideoMeetComponent() {
                                     {newMessages}
                                 </Badge>
                             )}
+                        </Button>
+
+                        {/* Whiteboard Toggle Button */}
+                        <Button
+                            variant={isWhiteboardOpen ? "default" : "outline"}
+                            size="icon"
+                            onClick={handleWhiteboard}
+                            className="rounded-full h-12 w-12"
+                            title={isWhiteboardOpen ? "Close Whiteboard" : "Open Whiteboard"}
+                        >
+                            <Pencil className="h-5 w-5" />
                         </Button>
 
                         <Button

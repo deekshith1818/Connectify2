@@ -2,7 +2,7 @@ import { createContext, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import httpStatus from "http-status";
-import server from "../environment"; // Adjust the import path as necessary
+import server from "../environment";
 
 export const AuthContext = createContext({});
 
@@ -13,16 +13,13 @@ const client = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  withCredentials: true // Enable credentials for CORS
+  withCredentials: true
 });
 
 // Add request interceptor for debugging
 client.interceptors.request.use(
   (config) => {
     console.log("🚀 Making request to:", config.url);
-    console.log("🚀 Request method:", config.method);
-    console.log("🚀 Request data:", config.data);
-    console.log("🚀 Request headers:", config.headers);
     return config;
   },
   (error) => {
@@ -34,26 +31,11 @@ client.interceptors.request.use(
 // Add response interceptor for debugging
 client.interceptors.response.use(
   (response) => {
-    console.log("✅ Response received:", {
-      status: response.status,
-      statusText: response.statusText,
-      data: response.data,
-      headers: response.headers,
-    });
+    console.log("✅ Response received:", response.status);
     return response;
   },
   (error) => {
-    console.error("❌ Response error:", {
-      message: error.message,
-      code: error.code,
-      response: error.response ? {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        headers: error.response.headers,
-      } : "No response received",
-      request: error.request ? "Request was made but no response received" : "No request made",
-    });
+    console.error("❌ Response error:", error.message);
     return Promise.reject(error);
   }
 );
@@ -72,31 +54,20 @@ export const AuthProvider = ({ children }) => {
         password,
       });
 
-      console.log("🎯 Registration response status:", response.status);
-      
       if (response.status === httpStatus.CREATED) {
         console.log("✅ Registration successful");
         navigate("/home");
         return response.data.message;
       } else {
-        console.log("❌ Registration failed - unexpected status:", response.status);
         throw new Error("Registration failed");
       }
     } catch (err) {
       console.error("💥 Registration error:", err);
-      
-      // Enhanced error handling
       if (err.response) {
-        // Server responded with error status
-        console.error("Server error response:", err.response.data);
         throw new Error(err.response.data.message || "Registration failed");
       } else if (err.request) {
-        // Request was made but no response received
-        console.error("No response received:", err.request);
         throw new Error("Unable to reach server. Please check if the server is running.");
       } else {
-        // Something else happened
-        console.error("Request setup error:", err.message);
         throw err;
       }
     }
@@ -105,95 +76,149 @@ export const AuthProvider = ({ children }) => {
   const handleLogin = async (username, password) => {
     try {
       console.log("🔐 Starting login for:", username);
-      console.log("🌐 API URL:", `${server}/api/v1/users/login`);
       
       const response = await client.post("/login", {
         username,
         password,
       });
 
-      console.log("🎯 Login response status:", response.status);
-      
       if (response.status === httpStatus.OK) {
         console.log("✅ Login successful");
         
         if (response.data.token) {
           localStorage.setItem("token", response.data.token);
-          console.log("🔑 Token saved to localStorage");
         }
         
         if (response.data.user) {
           setUserData(response.data.user);
-          console.log("👤 User data saved to context");
         }
         
-        // Redirect to home after successful login
         navigate("/home");
-        
         return response.data.message;
       } else {
-        console.log("❌ Login failed - unexpected status:", response.status);
         throw new Error("Login failed");
       }
     } catch (err) {
       console.error("💥 Login error:", err);
-      
-      // Enhanced error handling
       if (err.response) {
-        // Server responded with error status
-        console.error("Server error response:", err.response.data);
         throw new Error(err.response.data.message || "Login failed");
       } else if (err.request) {
-        // Request was made but no response received
-        console.error("No response received:", err.request);
         throw new Error("Unable to reach server. Please check if the server is running.");
       } else {
-        // Something else happened
-        console.error("Request setup error:", err.message);
         throw err;
       }
     }
   };
-   const getHistoryOfUser = async () => {
-        try {
-            const token = localStorage.getItem("token");
-            if (!token) {
-                throw new Error("No authentication token found");
-            }
-            
-            let request = await client.get("/get_all_activity", {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            return request.data
-        } catch (err) {
-            throw err;
+
+  const getHistoryOfUser = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+      
+      let request = await client.get("/get_all_activity", {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+      return request.data;
+    } catch (err) {
+      throw err;
     }
+  };
 
   const addToUserHistory = async (meetingCode) => {
-        try {
-            const token = localStorage.getItem("token");
-            if (!token) {
-                throw new Error("No authentication token found");
-            }
-            
-            let request = await client.post("/add_to_activity", {
-                meeting_code: meetingCode
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            return request
-        } catch (e) {
-            throw e;
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+      
+      let request = await client.post("/add_to_activity", {
+        meeting_code: meetingCode
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+      return request;
+    } catch (e) {
+      throw e;
     }
+  };
 
+  // ========== MEETING API FUNCTIONS ==========
 
-   
+  /**
+   * Start a new meeting (creates room in DB)
+   * @returns {Promise<string>} The generated meeting code
+   */
+  const startMeeting = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found. Please log in.");
+      }
+
+      const response = await axios.post(
+        `${server}/api/v1/meetings/start`,
+        {},
+        {
+          timeout: 30000,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          withCredentials: true
+        }
+      );
+
+      if (response.data.success) {
+        console.log("🎬 Meeting created:", response.data.meetingCode);
+        return response.data.meetingCode;
+      } else {
+        throw new Error(response.data.message || "Failed to create meeting");
+      }
+    } catch (err) {
+      console.error("❌ Error starting meeting:", err);
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
+      throw err;
+    }
+  };
+
+  /**
+   * Validate if a meeting code is valid and active
+   * @param {string} meetingCode - The meeting code to validate
+   * @returns {Promise<boolean>} True if valid, throws error if not
+   */
+  const validateMeeting = async (meetingCode) => {
+    try {
+      const response = await axios.get(
+        `${server}/api/v1/meetings/validate/${meetingCode.toUpperCase()}`,
+        {
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.success) {
+        console.log("✅ Meeting validated:", meetingCode);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("❌ Meeting validation failed:", err);
+      if (err.response?.status === 404) {
+        throw new Error("Invalid or expired meeting code");
+      }
+      throw new Error(err.response?.data?.message || "Failed to validate meeting");
+    }
+  };
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -211,7 +236,9 @@ export const AuthProvider = ({ children }) => {
         handleLogin, 
         logout,
         addToUserHistory,
-        getHistoryOfUser
+        getHistoryOfUser,
+        startMeeting,
+        validateMeeting
       }}
     >
       {children}
