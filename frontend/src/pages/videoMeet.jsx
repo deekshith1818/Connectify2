@@ -27,6 +27,9 @@ import {
 import AIAssistant from '../components/AIAssistant';
 import Whiteboard from '../components/Whiteboard';
 import Lobby from '../components/Lobby';
+import { ChatBubble, ChatBubbleAvatar, ChatBubbleMessage } from '../components/ui/chat-bubble';
+import { Send } from 'lucide-react';
+import VideoLayout from '../components/VideoLayout';
 import server from '../environment';
 
 const server_url = `${server}`;
@@ -149,6 +152,7 @@ export default function VideoMeetComponent() {
     const [lobbyStream, setLobbyStream] = useState(null);  // Stream for lobby preview
     const [isLobbyAudioEnabled, setIsLobbyAudioEnabled] = useState(true);
     const [isLobbyVideoEnabled, setIsLobbyVideoEnabled] = useState(true);
+    const [pinnedId, setPinnedId] = useState(null);  // For Speaker View - pinned participant
 
     // Helper functions for black video and silence audio
     const silence = useCallback(() => {
@@ -919,76 +923,86 @@ export default function VideoMeetComponent() {
                 </div>
 
                 {/* Video Grid or Whiteboard */}
-                <div className="flex-1 relative bg-slate-900 p-4">
+                <div className="flex-1 relative bg-slate-900">
                     {isWhiteboardOpen ? (
                         /* Whiteboard View */
-                        <div className="h-full">
+                        <div className="h-full p-4">
                             <Whiteboard 
                                 socket={socketRef.current} 
                                 roomId={window.location.href} 
                             />
                         </div>
                     ) : (
-                        /* Video Grid */
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 h-full">
-                            {/* Local Video */}
-                            <div className="relative bg-slate-800 rounded-xl overflow-hidden">
-                                <video
-                                    ref={localVideoRef}
-                                    autoPlay
-                                    muted
-                                    playsInline
-                                    className="w-full h-full object-cover"
-                                />
-                                <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
-                                    <span className="text-white text-sm">{username} (You)</span>
-                                </div>
-                            </div>
-
-                            {/* Remote Videos */}
-                            {videos.map((video, index) => (
-                                <div key={video.socketId} className="relative bg-slate-800 rounded-xl overflow-hidden">
-                                    <RemoteVideo 
-                                        stream={video.stream} 
-                                        socketId={video.socketId}
-                                        index={index}
-                                    />
-                                    <div className="absolute bottom-2 left-2 bg-black/50 rounded-lg px-2 py-1">
-                                        <span className="text-white text-sm">User {video.socketId.slice(-4)}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        /* Video Layout - Grid or Speaker View */
+                        <VideoLayout
+                            localStream={window.localStream}
+                            localVideoRef={localVideoRef}
+                            peers={videos}
+                            pinnedId={pinnedId}
+                            setPinnedId={setPinnedId}
+                            username={username}
+                        />
                     )}
 
                     {/* Chat Modal */}
                     {showModal && (
-                        <div className="absolute top-4 right-4 w-80 h-96 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700">
-                            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                <h3 className="font-semibold text-slate-900 dark:text-white">Chat</h3>
-                            </div>
-                            <div className="p-4 h-64 overflow-y-auto space-y-3">
-                                {messages.length > 0 ? messages.map((item, index) => (
-                                    <div key={index} className="space-y-1">
-                                        <p className="text-sm font-medium text-slate-900 dark:text-white">{item.sender}</p>
-                                        <p className="text-sm text-slate-600 dark:text-slate-300">{item.data}</p>
+                        <div className="absolute top-4 right-4 w-96 h-[500px] bg-gradient-to-b from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-slate-700/50 overflow-hidden flex flex-col">
+                            {/* Header */}
+                            <div className="p-4 border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                                        <h3 className="font-semibold text-white">Live Chat</h3>
                                     </div>
-                                )) : (
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">No messages yet</p>
+                                    <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                                        {messages.length} messages
+                                    </Badge>
+                                </div>
+                            </div>
+                            
+                            {/* Messages */}
+                            <div className="flex-1 p-4 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                                {messages.length > 0 ? messages.map((item, index) => {
+                                    const isCurrentUser = item.sender === username;
+                                    return (
+                                        <ChatBubble key={index} variant={isCurrentUser ? "sent" : "received"}>
+                                            <ChatBubbleAvatar 
+                                                fallback={item.sender?.charAt(0).toUpperCase() || 'U'}
+                                            />
+                                            <div className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+                                                <span className="text-xs text-slate-400 mb-1 px-1">{item.sender}</span>
+                                                <ChatBubbleMessage variant={isCurrentUser ? "sent" : "received"}>
+                                                    {item.data}
+                                                </ChatBubbleMessage>
+                                            </div>
+                                        </ChatBubble>
+                                    );
+                                }) : (
+                                    <div className="flex flex-col items-center justify-center h-full text-center">
+                                        <MessageCircle className="h-12 w-12 text-slate-600 mb-3" />
+                                        <p className="text-slate-400 text-sm">No messages yet</p>
+                                        <p className="text-slate-500 text-xs mt-1">Start the conversation!</p>
+                                    </div>
                                 )}
                             </div>
-                            <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-                                <div className="flex space-x-2">
+                            
+                            {/* Input */}
+                            <div className="p-4 border-t border-slate-700/50 bg-slate-800/30">
+                                <div className="flex gap-2">
                                     <input
                                         type="text"
                                         value={message}
                                         onChange={(e) => setMessage(e.target.value)}
                                         onKeyPress={handleKeyPress}
                                         placeholder="Type a message..."
-                                        className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
                                     />
-                                    <Button onClick={sendMessage} size="sm">
-                                        Send
+                                    <Button 
+                                        onClick={sendMessage} 
+                                        size="icon"
+                                        className="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 transition-all"
+                                    >
+                                        <Send className="h-5 w-5" />
                                     </Button>
                                 </div>
                             </div>
