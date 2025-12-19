@@ -3,6 +3,7 @@ import { cn } from "../../lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Button } from "./button";
 import { MessageLoading } from "./message-loading";
+import { Sparkles } from "lucide-react";
 
 /**
  * ChatBubble - Container for chat message with avatar and content
@@ -10,6 +11,7 @@ import { MessageLoading } from "./message-loading";
 export function ChatBubble({
   variant = "received",
   layout = "default",
+  isAi = false,
   className,
   children,
 }) {
@@ -28,10 +30,12 @@ export function ChatBubble({
 
 /**
  * ChatBubbleMessage - The message content bubble
+ * Supports AI-styled messages with gradient background
  */
 export function ChatBubbleMessage({
   variant = "received",
   isLoading,
+  isAi = false,
   className,
   children,
 }) {
@@ -39,12 +43,20 @@ export function ChatBubbleMessage({
     <div
       className={cn(
         "rounded-lg p-3 max-w-[80%]",
-        variant === "sent"
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted",
+        isAi 
+          ? "bg-gradient-to-r from-indigo-900 to-purple-900 text-white border border-indigo-500/30"
+          : variant === "sent"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted",
         className
       )}
     >
+      {isAi && (
+        <div className="flex items-center gap-1.5 mb-2 text-xs text-indigo-300">
+          <Sparkles size={12} className="text-purple-400" />
+          <span className="font-medium">AI Assistant</span>
+        </div>
+      )}
       {isLoading ? (
         <div className="flex items-center space-x-2">
           <MessageLoading />

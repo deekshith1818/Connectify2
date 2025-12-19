@@ -7,8 +7,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Configuration
 const CONFIG = {
-    primaryModel: "gemini-2.5-pro",
-    fallbackModel: "gemini-1.5-flash",
+    primaryModel: "gemini-2.5-flash",  // Using 2.5 flash model
+    fallbackModel: "gemini-1.5-flash",  // Fallback to 1.5 flash
     maxRetries: 3,
     baseDelay: 1000, // milliseconds
 };
@@ -27,7 +27,7 @@ const retryWithBackoff = async (fn, maxRetries = CONFIG.maxRetries) => {
         } catch (error) {
             const isLastAttempt = attempt === maxRetries - 1;
             const is503Error = error.status === 503;
-            
+
             if (is503Error && !isLastAttempt) {
                 const delay = CONFIG.baseDelay * Math.pow(2, attempt);
                 console.log(`Attempt ${attempt + 1} failed (503). Retrying in ${delay}ms...`);
@@ -42,11 +42,11 @@ const retryWithBackoff = async (fn, maxRetries = CONFIG.maxRetries) => {
 export const askAI = async (req, res) => {
     try {
         const { message, context = [] } = req.body;
-        
+
         if (!message) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
-                error: 'Message is required' 
+                error: 'Message is required'
             });
         }
 
@@ -56,7 +56,7 @@ export const askAI = async (req, res) => {
         // Try with primary model first, then fallback
         const executeChat = async () => {
             const model = getModel(useFallback);
-            
+
             const chat = model.startChat({
                 history: [
                     {
@@ -86,7 +86,7 @@ export const askAI = async (req, res) => {
             if (error.status === 503) {
                 console.log('Primary model overloaded, switching to fallback model...');
                 useFallback = true;
-                
+
                 try {
                     text = await retryWithBackoff(executeChat);
                 } catch (fallbackError) {
@@ -103,7 +103,7 @@ export const askAI = async (req, res) => {
             }
         }
 
-        res.json({ 
+        res.json({
             success: true,
             response: text,
             model: useFallback ? CONFIG.fallbackModel : CONFIG.primaryModel
@@ -111,7 +111,7 @@ export const askAI = async (req, res) => {
 
     } catch (error) {
         console.error('Error in askAI:', error);
-        
+
         // Handle specific error types
         if (error.status === 429) {
             return res.status(429).json({
@@ -130,7 +130,7 @@ export const askAI = async (req, res) => {
             });
         }
 
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Error processing your request. Please try again.',
             code: 'INTERNAL_ERROR'
@@ -143,9 +143,9 @@ export const summarizeMeeting = async (req, res) => {
         const { transcript } = req.body;
 
         if (!transcript) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
-                error: 'Transcript is required' 
+                error: 'Transcript is required'
             });
         }
 
@@ -153,7 +153,7 @@ export const summarizeMeeting = async (req, res) => {
 
         const generateSummary = async () => {
             const model = getModel(useFallback);
-            
+
             const prompt = `Please provide a concise summary of the following meeting transcript. 
             Highlight key points, decisions made, and action items. Format the response in markdown with appropriate headings:
             
@@ -166,12 +166,12 @@ export const summarizeMeeting = async (req, res) => {
 
         const generateActionItems = async (summaryText) => {
             const model = getModel(useFallback);
-            
+
             const actionItemsPrompt = `Extract action items from the following meeting summary as a bulleted list. 
             Format each item with a clear owner and deadline if mentioned:
             
             ${summaryText}`;
-            
+
             const actionItemsResult = await model.generateContent(actionItemsPrompt);
             const actionItemsResponse = await actionItemsResult.response;
             return actionItemsResponse.text();
@@ -187,7 +187,7 @@ export const summarizeMeeting = async (req, res) => {
             if (error.status === 503) {
                 console.log('Primary model overloaded, switching to fallback model...');
                 useFallback = true;
-                
+
                 try {
                     summary = await retryWithBackoff(generateSummary);
                     actionItems = await retryWithBackoff(() => generateActionItems(summary));
@@ -214,7 +214,7 @@ export const summarizeMeeting = async (req, res) => {
 
     } catch (error) {
         console.error('Error in summarizeMeeting:', error);
-        
+
         if (error.status === 503) {
             return res.status(503).json({
                 success: false,
@@ -233,7 +233,7 @@ export const summarizeMeeting = async (req, res) => {
             });
         }
 
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Error generating meeting summary. Please try again.',
             code: 'INTERNAL_ERROR'

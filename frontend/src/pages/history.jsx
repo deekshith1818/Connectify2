@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { NavBar } from '../components/ui/tubelight-navbar';
 import { 
   Home, 
   History as HistoryIcon, 
@@ -14,7 +15,8 @@ import {
   ArrowLeft,
   RefreshCw,
   Search,
-  Filter
+  Filter,
+  Settings
 } from 'lucide-react';
 
 export default function History() {
@@ -96,21 +98,23 @@ export default function History() {
         }).length
     };
 
+    // Navigation items for Tubelight Navbar
+    const navItems = [
+        { name: 'Home', url: '/home', icon: Home },
+        { name: 'History', url: '/history', icon: HistoryIcon },
+        { name: 'Settings', url: '/settings', icon: Settings },
+    ];
+
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        navigate("/auth");
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+                <NavBar items={navItems} onLogout={handleLogout} />
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="flex items-center space-x-4 mb-8">
-                        <Button
-                            variant="ghost"
-                            onClick={() => navigate("/home")}
-                            className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                        >
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Back to Home
-                        </Button>
-                    </div>
-                    
                     <div className="flex flex-col items-center justify-center py-20">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
                         <p className="text-slate-600 dark:text-slate-300">Loading meeting history...</p>
@@ -122,27 +126,20 @@ export default function History() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+            {/* Tubelight Navbar */}
+            <NavBar items={navItems} onLogout={handleLogout} />
+            
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Header */}
+                {/* Page Title */}
                 <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center space-x-4">
-                        <Button
-                            variant="ghost"
-                            onClick={() => navigate("/home")}
-                            className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                        >
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Back to Home
-                        </Button>
-                        <div>
-                            <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center">
-                                <HistoryIcon className="mr-3 h-8 w-8" />
-                                Meeting History
-                            </h1>
-                            <p className="text-slate-600 dark:text-slate-300 mt-1">
-                                Track your past meetings and activities
-                            </p>
-                        </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center">
+                            <HistoryIcon className="mr-3 h-8 w-8" />
+                            Meeting History
+                        </h1>
+                        <p className="text-slate-600 dark:text-slate-300 mt-1">
+                            Track your past meetings and activities
+                        </p>
                     </div>
                     
                     <Button

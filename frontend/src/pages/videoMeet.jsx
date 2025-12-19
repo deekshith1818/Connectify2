@@ -24,7 +24,8 @@ import {
   LogOut,
   Pencil
 } from 'lucide-react';
-import AIAssistant from '../components/AIAssistant';
+import AIAssistantPanel from '../components/AIAssistantPanel';
+import VoiceAssistant from '../components/VoiceAssistant';
 import Whiteboard from '../components/Whiteboard';
 import Lobby from '../components/Lobby';
 import { ChatBubble, ChatBubbleAvatar, ChatBubbleMessage } from '../components/ui/chat-bubble';
@@ -1120,8 +1121,19 @@ export default function VideoMeetComponent() {
                 </DialogContent>
             </Dialog>
 
-            {/* AI Assistant */}
-            <AIAssistant meetingId={socketIdRef.current} />
+            {/* Always-On Voice Assistant - Continuous transcription & wake word */}
+            <VoiceAssistant 
+                socket={socketRef.current} 
+                roomId={window.location.href} 
+                username={username}
+            />
+
+            {/* AI Assistant Panel - Chat UI for text input */}
+            <AIAssistantPanel 
+                socket={socketRef.current} 
+                roomId={window.location.href} 
+                username={username}
+            />
         </div>
     );
 }

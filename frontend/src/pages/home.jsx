@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { AuthContext } from '../contexts/AuthContext';
+import { NavBar } from '../components/ui/tubelight-navbar';
 import { 
   Video, 
   Users, 
@@ -13,7 +14,8 @@ import {
   Plus,
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  Home
 } from 'lucide-react';
 
 function HomeComponent() {
@@ -90,54 +92,22 @@ function HomeComponent() {
         { code: "DEF456", date: "2024-01-13", duration: "30 min" }
     ];
 
+    // Navigation items for Tubelight Navbar
+    const navItems = [
+        { name: 'Home', url: '/home', icon: Home },
+        { name: 'History', url: '/history', icon: HistoryIcon },
+        { name: 'Settings', url: '/settings', icon: Settings },
+    ];
+
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        navigate("/auth");
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-            {/* Header */}
-            <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-16">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                                <Video className="h-5 w-5 text-white" />
-                            </div>
-                            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Connectify</h1>
-                        </div>
-                        
-                        <div className="flex items-center space-x-4">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => navigate("/history")}
-                                className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                            >
-                                <HistoryIcon className="mr-2 h-4 w-4" />
-                                History
-                            </Button>
-                            
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                            >
-                                <Settings className="mr-2 h-4 w-4" />
-                                Settings
-                            </Button>
-                            
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    localStorage.removeItem("token");
-                                    navigate("/auth");
-                                }}
-                                className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
-                            >
-                                <LogOut className="mr-2 h-4 w-4" />
-                                Logout
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </header>
+            {/* Tubelight Navbar */}
+            <NavBar items={navItems} onLogout={handleLogout} />
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
