@@ -115,8 +115,13 @@ app.use((req, res) => {
 // Start server
 const start = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI
-      || "mongodb+srv://root:KhVys0W5Yp4RNhuB@cluster0.ijjgfjy.mongodb.net/zoom";
+    const mongoUri = process.env.MONGODB_URI;
+
+    if (!mongoUri) {
+      console.error("❌ MONGODB_URI environment variable is not set!");
+      console.error("   Please add MONGODB_URI to your .env file");
+      process.exit(1);
+    }
 
     console.log("📊 Connecting to MongoDB...");
     const connectionDb = await mongoose.connect(mongoUri);
