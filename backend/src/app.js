@@ -26,32 +26,16 @@ const __dirname = path.dirname(__filename);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// Allowed Origins
+// Allowed Origins - Production and Development
 const allowedOrigins = [
+  // Production URLs
+  "https://connectify-frontend-iota.vercel.app",
   "https://connectify2-nj9q.onrender.com",
   "https://connectify3.onrender.com",
-  "https://connectify2-jhtb.onrender.com",
-  "https://connectify2-cyxk.onrender.com",
+  // Local development
   "http://localhost:5173",
   "http://localhost:5174",
-  "http://localhost:5175",
   "http://localhost:3000",
-  "https://connectify-frontend-d62v0shob-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-2p5geygxe-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-ijuffjl3v-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-1l53a45hw-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-jf8gzlm9x-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-lfpo0ycx3-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-9baqn7a5n-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-cwtvwzw9b-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-4o7f2y4t8-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-f7ybif8d2-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-fkjp7t4z1-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-i3fvukxvh-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-oqiuc56up-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-iv258fm4b-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-h7qnj1y0i-deekshith-nanavenis-projects.vercel.app",
-  "https://connectify-frontend-iota.vercel.app",
 ];
 
 // CORS setup
