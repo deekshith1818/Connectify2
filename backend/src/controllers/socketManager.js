@@ -51,7 +51,7 @@ const connectToSocket = (server) => {
     const allowedOrigins = [
         "https://connectify2-nj9q.onrender.com",
         "https://connectify3.onrender.com",
-        "https://connectify2-jhtb.onrender.com",
+        "https://connectify2-web.vercel.app",
         "https://connectify2-cyxk.onrender.com",
         "http://localhost:5173",
         "http://localhost:5174",

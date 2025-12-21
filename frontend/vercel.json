@@ -6,13 +6,13 @@
     }
   ],
   "env": {
-    "VITE_API_URL": "https://connectify2-jhtb.onrender.com",
-    "VITE_DEV_API_URL": "https://connectify2-jhtb.onrender.com"
+    "VITE_API_URL": "https://connectify3.onrender.com",
+    "VITE_DEV_API_URL": "https://connectify3.onrender.com"
   },
   "build": {
     "env": {
-      "VITE_API_URL": "https://connectify2-jhtb.onrender.com",
-      "VITE_DEV_API_URL": "https://connectify2-jhtb.onrender.com"
+      "VITE_API_URL": "https://connectify3.onrender.com",
+      "VITE_DEV_API_URL": "https://connectify3.onrender.com"
     }
   }
 }
