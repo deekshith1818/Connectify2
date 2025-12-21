@@ -32,6 +32,7 @@ const allowedOrigins = [
   "https://connectify-frontend-iota.vercel.app",
   "https://connectify2-nj9q.onrender.com",
   "https://connectify3.onrender.com",
+  "https://connectify2-web.vercel.app",  // ← Add this line
   // Local development
   "http://localhost:5173",
   "http://localhost:5174",
