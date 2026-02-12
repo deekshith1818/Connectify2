@@ -1,25 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, MessageSquare, ChevronDown, Bot, User, AlertCircle, Volume2, VolumeX } from 'lucide-react';
-import { PromptInputBox } from './ui/ai-prompt-box';
+import { Sparkles, MessageSquare, ChevronDown, Bot, User, AlertCircle, Volume2, VolumeX, Send } from 'lucide-react';
 
 /**
- * AIAssistantPanel - A floating chat panel for AI interactions
- * Connects to socket.io for real-time AI responses
- * 
- * @param {Object} props
- * @param {Object} props.socket - Socket.io client instance
- * @param {string} props.roomId - Current room ID
- * @param {string} props.username - Current user's name
+ * AIAssistantPanel - Compact floating chat panel for AI interactions
  */
 const AIAssistantPanel = ({ socket, roomId, username }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([]);
+    const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState(true);
     const messagesEndRef = useRef(null);
     const synthRef = useRef(null);
+    const inputRef = useRef(null);
 
     // Initialize Speech Synthesis
     useEffect(() => {
@@ -59,7 +54,7 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
         synthRef.current.speak(utterance);
     }, [voiceEnabled]);
 
-    // Scroll to bottom when new messages arrive
+    // Scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -67,30 +62,24 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
     // Track last message to prevent duplicates
     const lastMessageRef = useRef('');
 
-    // Listen for AI responses from server
+    // Listen for AI responses
     useEffect(() => {
         if (!socket) return;
 
         const handleChatMessage = (message, sender, socketId) => {
-            if (sender && sender.includes('Connectify AI') && socketId === 'ai-assistant') {
-                // Deduplicate: skip if same message received within 2 seconds
-                if (lastMessageRef.current === message) {
-                    console.log('🔄 Skipping duplicate message');
-                    return;
-                }
+            if (sender?.includes('Connectify AI') && socketId === 'ai-assistant') {
+                if (lastMessageRef.current === message) return;
                 lastMessageRef.current = message;
                 setTimeout(() => { lastMessageRef.current = ''; }, 2000);
 
-                const aiMessage = {
+                setMessages(prev => [...prev, {
                     id: Date.now(),
                     type: 'ai',
                     content: message,
                     timestamp: new Date().toISOString(),
-                };
-                setMessages(prev => [...prev, aiMessage]);
+                }]);
                 setIsLoading(false);
                 
-                // Speak the response (only from this panel, not VoiceAssistant)
                 if (voiceEnabled && isOpen) {
                     speakText(message);
                 }
@@ -99,22 +88,17 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
 
         const handleAiResponse = (data) => {
             if (data.data) {
-                // Deduplicate
-                if (lastMessageRef.current === data.data) {
-                    console.log('🔄 Skipping duplicate ai-response');
-                    return;
-                }
+                if (lastMessageRef.current === data.data) return;
                 lastMessageRef.current = data.data;
                 setTimeout(() => { lastMessageRef.current = ''; }, 2000);
 
-                const aiMessage = {
+                setMessages(prev => [...prev, {
                     id: Date.now(),
                     type: 'ai',
                     content: data.data,
                     isError: data.isError,
                     timestamp: data.timestamp || new Date().toISOString(),
-                };
-                setMessages(prev => [...prev, aiMessage]);
+                }]);
                 setIsLoading(false);
                 
                 if (voiceEnabled && isOpen && !data.isError) {
@@ -133,29 +117,23 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
     }, [socket, voiceEnabled, isOpen, speakText]);
 
     // Handle sending a message
-    const handleSend = (message, files) => {
-        if (!message.trim() && (!files || files.length === 0)) return;
-        if (!socket || !roomId) {
-            console.error('Socket or roomId not available');
-            return;
-        }
+    const handleSend = () => {
+        const message = inputValue.trim();
+        if (!message || !socket || !roomId) return;
 
-        // Add user message to chat
-        const userMessage = {
+        setMessages(prev => [...prev, {
             id: Date.now(),
             type: 'user',
             content: message,
             timestamp: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, userMessage]);
+        }]);
+        setInputValue('');
         setIsLoading(true);
 
-        // Prepare the message - add "Hey Connectify" prefix for wake word detection
         const aiMessage = message.toLowerCase().includes('connectify') 
             ? message 
             : `Hey Connectify, ${message}`;
 
-        // Emit to server
         socket.emit('send-transcription', {
             roomId,
             username: username || 'User',
@@ -163,12 +141,16 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
         });
     };
 
-    // Toggle voice
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
     const toggleVoice = () => {
         setVoiceEnabled(prev => !prev);
-        if (synthRef.current) {
-            synthRef.current.cancel();
-        }
+        if (synthRef.current) synthRef.current.cancel();
         setIsSpeaking(false);
     };
 
@@ -182,9 +164,9 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0, opacity: 0 }}
                         onClick={() => setIsOpen(true)}
-                        className="fixed bottom-24 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-2xl shadow-purple-500/30 hover:shadow-purple-500/50 transition-all duration-300"
+                        className="fixed bottom-20 right-4 z-40 flex items-center gap-2 px-3 py-2 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 transition-all duration-200 text-sm"
                     >
-                        <Sparkles size={20} className="animate-pulse" />
+                        <Sparkles size={16} className="animate-pulse" />
                         <span className="font-medium">AI Assistant</span>
                     </motion.button>
                 )}
@@ -194,87 +176,84 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: 100, scale: 0.95 }}
+                        initial={{ opacity: 0, y: 50, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 100, scale: 0.95 }}
+                        exit={{ opacity: 0, y: 50, scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed bottom-4 right-4 z-50 w-[400px] max-w-[calc(100vw-32px)] flex flex-col bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
-                        style={{ maxHeight: 'calc(100vh - 120px)' }}
+                        className="fixed bottom-20 right-4 z-40 w-96 flex flex-col bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
+                        style={{ maxHeight: 'calc(100vh - 160px)' }}
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-800/50">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-800/50">
                             <div className="flex items-center gap-2">
                                 <div className="relative">
-                                    <Sparkles size={20} className="text-purple-400" />
+                                    <Sparkles size={16} className="text-purple-400" />
                                     {isSpeaking && (
-                                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                                        <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
                                     )}
                                 </div>
-                                <span className="font-semibold text-white">Connectify AI</span>
+                                <span className="font-medium text-white text-sm">Connectify AI</span>
                                 {isLoading && (
-                                    <div className="flex gap-1 ml-2">
-                                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    <div className="flex gap-0.5 ml-1">
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                     </div>
                                 )}
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
                                 <button
                                     onClick={toggleVoice}
-                                    className={`p-2 rounded-lg transition-colors ${
+                                    className={`p-1.5 rounded-md transition-colors ${
                                         voiceEnabled 
                                             ? 'text-green-400 hover:bg-green-500/20' 
                                             : 'text-slate-400 hover:bg-slate-700'
                                     }`}
-                                    title={voiceEnabled ? 'Mute AI Voice' : 'Unmute AI Voice'}
+                                    title={voiceEnabled ? 'Mute' : 'Unmute'}
                                 >
-                                    {voiceEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                                    {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
                                 </button>
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                                    className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                                 >
-                                    <ChevronDown size={20} />
+                                    <ChevronDown size={16} />
                                 </button>
                             </div>
                         </div>
 
                         {/* Messages Area */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[400px]">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[180px] max-h-[350px]">
                             {messages.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4">
-                                        <Bot size={32} className="text-white" />
+                                <div className="flex flex-col items-center justify-center h-full text-center py-4">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-2">
+                                        <Bot size={20} className="text-white" />
                                     </div>
-                                    <h3 className="text-lg font-medium text-white mb-2">Connectify AI</h3>
-                                    <p className="text-sm text-slate-400 max-w-[280px]">
-                                        Ask me anything about your meeting, request summaries, or get help with action items.
+                                    <p className="text-xs text-slate-400 max-w-[200px]">
+                                        Ask about your meeting, summaries, or action items.
                                     </p>
                                 </div>
                             ) : (
                                 messages.map((msg) => (
                                     <motion.div
                                         key={msg.id}
-                                        initial={{ opacity: 0, y: 10 }}
+                                        initial={{ opacity: 0, y: 5 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className={`flex gap-3 ${msg.type === 'user' ? 'flex-row-reverse' : ''}`}
+                                        className={`flex gap-2 ${msg.type === 'user' ? 'flex-row-reverse' : ''}`}
                                     >
-                                        {/* Avatar */}
-                                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                                        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
                                             msg.type === 'ai' 
                                                 ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
                                                 : 'bg-blue-600'
                                         }`}>
                                             {msg.type === 'ai' ? (
-                                                <Sparkles size={16} className="text-white" />
+                                                <Sparkles size={12} className="text-white" />
                                             ) : (
-                                                <User size={16} className="text-white" />
+                                                <User size={12} className="text-white" />
                                             )}
                                         </div>
                                         
-                                        {/* Message */}
-                                        <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                                        <div className={`max-w-[85%] rounded-xl px-3 py-1.5 text-sm ${
                                             msg.type === 'ai'
                                                 ? msg.isError 
                                                     ? 'bg-red-500/20 border border-red-500/30 text-red-200'
@@ -282,12 +261,12 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
                                                 : 'bg-blue-600 text-white'
                                         }`}>
                                             {msg.isError && (
-                                                <div className="flex items-center gap-1 mb-1">
-                                                    <AlertCircle size={12} />
+                                                <div className="flex items-center gap-1 mb-0.5">
+                                                    <AlertCircle size={10} />
                                                     <span className="text-xs">Error</span>
                                                 </div>
                                             )}
-                                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                            <p className="whitespace-pre-wrap text-xs leading-relaxed">{msg.content}</p>
                                         </div>
                                     </motion.div>
                                 ))
@@ -296,12 +275,26 @@ const AIAssistantPanel = ({ socket, roomId, username }) => {
                         </div>
 
                         {/* Input Area */}
-                        <div className="p-3 border-t border-slate-700 bg-slate-800/30">
-                            <PromptInputBox
-                                onSend={handleSend}
-                                isLoading={isLoading}
-                                placeholder="Ask Connectify AI..."
-                            />
+                        <div className="p-2 border-t border-slate-700 bg-slate-800/30">
+                            <div className="flex gap-2">
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    placeholder="Ask AI..."
+                                    className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                                    disabled={isLoading}
+                                />
+                                <button 
+                                    onClick={handleSend}
+                                    disabled={isLoading || !inputValue.trim()}
+                                    className="p-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                    <Send size={16} className="text-white" />
+                                </button>
+                            </div>
                         </div>
                     </motion.div>
                 )}

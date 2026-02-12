@@ -11,6 +11,7 @@ import userRoutes from "./routes/usersRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import meetingRoutes from "./routes/meetingRoutes.js";
 import connectToSocket from "./controllers/socketManager.js";
+import { startReminderCron } from "./services/cronJobs.js";
 
 dotenv.config();
 
@@ -114,6 +115,9 @@ const start = async () => {
 
     server.listen(app.get("port"), () => {
       console.log(`✅ Server running on port ${app.get("port")}`);
+
+      // Start cron jobs after server is running
+      startReminderCron();
     });
   } catch (err) {
     console.error("❌ Error:", err.message);

@@ -110,6 +110,42 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const handleGoogleLogin = async (credential) => {
+    try {
+      console.log("🔐 Starting Google login");
+      
+      const response = await client.post("/auth/google", {
+        credential,
+      });
+
+      if (response.status === httpStatus.OK) {
+        console.log("✅ Google login successful");
+        
+        if (response.data.token) {
+          localStorage.setItem("token", response.data.token);
+        }
+        
+        if (response.data.user) {
+          setUserData(response.data.user);
+        }
+        
+        navigate("/home");
+        return response.data;
+      } else {
+        throw new Error("Google login failed");
+      }
+    } catch (err) {
+      console.error("💥 Google login error:", err);
+      if (err.response) {
+        throw new Error(err.response.data.message || "Google login failed");
+      } else if (err.request) {
+        throw new Error("Unable to reach server. Please check if the server is running.");
+      } else {
+        throw err;
+      }
+    }
+  };
+
   const getHistoryOfUser = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -233,7 +269,8 @@ export const AuthProvider = ({ children }) => {
         userData, 
         setUserData, 
         handleRegister, 
-        handleLogin, 
+        handleLogin,
+        handleGoogleLogin,
         logout,
         addToUserHistory,
         getHistoryOfUser,

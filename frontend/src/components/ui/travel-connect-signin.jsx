@@ -191,8 +191,69 @@ const SignInCard = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const googleButtonRef = useRef(null);
 
-  const { handleRegister, handleLogin } = useContext(AuthContext);
+  const { handleRegister, handleLogin, handleGoogleLogin } = useContext(AuthContext);
+
+  // Google Sign-In initialization
+  useEffect(() => {
+    const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    
+    if (!GOOGLE_CLIENT_ID) {
+      console.warn("⚠️ VITE_GOOGLE_CLIENT_ID not set. Google Sign-In disabled.");
+      return;
+    }
+
+    // Load Google Identity Services script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (window.google && googleButtonRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+        });
+        
+        window.google.accounts.id.renderButton(
+          googleButtonRef.current,
+          {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'continue_with',
+            shape: 'rectangular',
+            width: '100%',
+          }
+        );
+      }
+    };
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup script on unmount
+      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (existingScript) {
+        existingScript.remove();
+      }
+    };
+  }, []);
+
+  const handleGoogleCredentialResponse = async (response) => {
+    setIsGoogleLoading(true);
+    setError("");
+    
+    try {
+      await handleGoogleLogin(response.credential);
+    } catch (err) {
+      setError(err.message || "Google sign-in failed");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -392,6 +453,35 @@ const SignInCard = () => {
                 >
                   {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
                 </button>
+              </div>
+
+              {/* Divider */}
+              <div className="relative mt-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-white text-gray-500">or continue with</span>
+                </div>
+              </div>
+
+              {/* Google Sign-In Button */}
+              <div className="mt-6">
+                {isGoogleLoading ? (
+                  <div className="flex items-center justify-center h-10 w-full rounded-md border border-gray-200 bg-gray-50">
+                    <span className="text-gray-500 text-sm">Signing in with Google...</span>
+                  </div>
+                ) : (
+                  <div 
+                    ref={googleButtonRef} 
+                    className="flex justify-center [&>div]:w-full"
+                  ></div>
+                )}
+                {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                  <p className="text-xs text-gray-400 text-center mt-2">
+                    Google Sign-In not configured
+                  </p>
+                )}
               </div>
             </form>
           </motion.div>

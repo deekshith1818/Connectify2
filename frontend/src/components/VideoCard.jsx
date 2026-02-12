@@ -24,15 +24,47 @@ const VideoCard = ({
         if (videoRef.current && stream) {
             videoRef.current.srcObject = stream;
             
-            // Check if video track is enabled
-            const videoTrack = stream.getVideoTracks()[0];
-            setHasVideo(videoTrack?.enabled ?? false);
+            // Production-grade: Force play with onloadedmetadata to overcome browser autoplay policies
+            videoRef.current.onloadedmetadata = async () => {
+                try {
+                    await videoRef.current.play();
+                    console.log(`✅ VideoCard: Video playing for ${peerId}`);
+                } catch (e) {
+                    console.error("❌ VideoCard: Autoplay blocked:", e.message);
+                }
+            };
             
-            // Listen for track changes
+            // FIXED: Check if video track EXISTS, not just if enabled
+            // This ensures video element renders even during state transitions
+            const videoTrack = stream.getVideoTracks()[0];
+            const trackExists = !!videoTrack;
+            const trackEnabled = videoTrack?.enabled ?? false;
+            
+            console.log("🎬 VideoCard: Stream attached", {
+                peerId,
+                isLocal,
+                streamId: stream.id,
+                videoTracks: stream.getVideoTracks().length,
+                audioTracks: stream.getAudioTracks().length,
+                trackExists,
+                trackEnabled
+            });
+            
+            // Show video if track exists (enabled state can change dynamically)
+            setHasVideo(trackExists && trackEnabled);
+            
+            // Listen for track enabled/disabled state changes
             const handleTrackChange = () => {
                 const vTrack = stream.getVideoTracks()[0];
-                setHasVideo(vTrack?.enabled ?? false);
+                setHasVideo(!!vTrack && vTrack.enabled);
             };
+            
+            // Also listen for track mute/unmute events
+            if (videoTrack) {
+                videoTrack.onmute = () => setHasVideo(false);
+                videoTrack.onunmute = () => setHasVideo(true);
+                videoTrack.onended = () => setHasVideo(false);
+            }
             
             stream.addEventListener('addtrack', handleTrackChange);
             stream.addEventListener('removetrack', handleTrackChange);
@@ -40,9 +72,14 @@ const VideoCard = ({
             return () => {
                 stream.removeEventListener('addtrack', handleTrackChange);
                 stream.removeEventListener('removetrack', handleTrackChange);
+                if (videoTrack) {
+                    videoTrack.onmute = null;
+                    videoTrack.onunmute = null;
+                    videoTrack.onended = null;
+                }
             };
         }
-    }, [stream]);
+    }, [stream, peerId, isLocal]);
 
     const handlePinClick = (e) => {
         e.stopPropagation();

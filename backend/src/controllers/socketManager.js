@@ -1,43 +1,6 @@
 import { Server } from 'socket.io';
 import { deactivateMeeting } from './meeting.controller.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Initialize Google Generative AI with gemini-2.5-flash
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const primaryModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-// Helper function to generate content with retry and fallback
-async function generateWithRetry(prompt, maxRetries = 2) {
-    let lastError = null;
-
-    // Try primary model first
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            console.log(`🔄 Attempt ${i + 1} with gemini-2.5-flash...`);
-            const result = await primaryModel.generateContent(prompt);
-            return result.response.text();
-        } catch (error) {
-            lastError = error;
-            console.log(`⚠️ Primary model failed: ${error.message}`);
-            if (error.status !== 503 && error.status !== 429) {
-                throw error; // Don't retry non-transient errors
-            }
-            // Wait before retry (exponential backoff)
-            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-        }
-    }
-
-    // Try fallback model
-    try {
-        console.log(`🔄 Trying fallback (retry) with gemini-2.5-flash...`);
-        const result = await fallbackModel.generateContent(prompt);
-        return result.response.text();
-    } catch (error) {
-        console.log(`⚠️ Fallback model also failed: ${error.message}`);
-        throw lastError || error;
-    }
-}
+import AIService from '../services/aiService.js';
 
 // In-memory storage for meeting transcripts
 const roomTranscripts = {};
@@ -194,18 +157,18 @@ const connectToSocket = (server) => {
             console.log("🔍 Wake word check:");
             console.log("   Clean text:", cleanText);
             console.log("   Has wake word:", hasWakeWord);
-            console.log("   API Key present:", !!process.env.GEMINI_API_KEY);
+            console.log("   AI configured:", AIService.isConfigured());
 
             if (hasWakeWord) {
                 console.log("🤖 WAKE WORD DETECTED! Processing AI request...");
 
-                // Check if API key is configured
-                if (!process.env.GEMINI_API_KEY) {
-                    console.error("❌ GEMINI_API_KEY is not set in .env file!");
+                // Check if AI service is configured
+                if (!AIService.isConfigured()) {
+                    console.error(`❌ ${AIService.getApiKeyEnvVar()} is not set in .env file!`);
 
                     // Emit error to chat so user can see it
                     io.in(roomId).emit("chat-message",
-                        "⚠️ AI Error: GEMINI_API_KEY is not configured. Please add it to your .env file.",
+                        `⚠️ AI Error: ${AIService.getApiKeyEnvVar()} is not configured. Please add it to your .env file.`,
                         "Connectify AI ⚠️",
                         "ai-assistant"
                     );
@@ -230,10 +193,11 @@ Instructions:
 
 Your response:`;
 
-                    console.log("📤 Sending prompt to Gemini API...");
+                    console.log("📤 Sending prompt to AI service...");
+                    console.log("   Provider:", AIService.getProvider().toUpperCase());
                     console.log("   Prompt length:", prompt.length, "characters");
 
-                    const response = await generateWithRetry(prompt);
+                    const response = await AIService.generateText(prompt);
 
                     console.log("✨ AI Response received:");
                     console.log("   Length:", response.length, "characters");
@@ -273,16 +237,17 @@ Your response:`;
 
                 } catch (error) {
                     console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    console.error("❌ GEMINI API ERROR:");
+                    console.error("❌ AI SERVICE ERROR:");
+                    console.error("   Provider:", AIService.getProvider());
                     console.error("   Message:", error.message);
-                    console.error("   Status:", error.status || "N/A");
-                    console.error("   Details:", error.errorDetails || "N/A");
+                    console.error("   Status:", error.status || error.statusCode || "N/A");
                     console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                     // Send visible error message to chat
-                    const errorMessage = error.status === 429
+                    const status = error.status || error.statusCode || error.response?.status;
+                    const errorMessage = status === 429
                         ? "⚠️ AI Rate limit exceeded. Please wait a moment and try again."
-                        : error.status === 503
+                        : status === 503
                             ? "⚠️ AI service is temporarily overloaded. Please try again."
                             : `⚠️ AI Error: ${error.message}. Check server logs for details.`;
 
@@ -308,7 +273,7 @@ Your response:`;
 
         // Get meeting summary on demand
         socket.on("get-meeting-summary", async ({ roomId }) => {
-            if (!roomTranscripts[roomId] || !process.env.GEMINI_API_KEY) {
+            if (!roomTranscripts[roomId] || !AIService.isConfigured()) {
                 socket.emit("ai-response", {
                     sender: "Connectify AI",
                     data: "No meeting transcript available yet. Start speaking to begin transcription!",
@@ -325,8 +290,7 @@ ${roomTranscripts[roomId]}
 
 Meeting Summary:`;
 
-                const result = await model.generateContent(prompt);
-                const summary = result.response.text();
+                const summary = await AIService.generateText(prompt);
 
                 socket.emit("ai-response", {
                     sender: "Connectify AI",

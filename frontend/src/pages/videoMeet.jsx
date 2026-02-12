@@ -24,8 +24,7 @@ import {
   LogOut,
   Pencil
 } from 'lucide-react';
-import AIAssistantPanel from '../components/AIAssistantPanel';
-import VoiceAssistant from '../components/VoiceAssistant';
+import AISidebar from '../components/AISidebar';
 import Whiteboard from '../components/Whiteboard';
 import Lobby from '../components/Lobby';
 import { ChatBubble, ChatBubbleAvatar, ChatBubbleMessage } from '../components/ui/chat-bubble';
@@ -91,7 +90,7 @@ const RemoteVideo = ({ stream, socketId, index }) => {
             ref={videoRef}
             autoPlay
             playsInline
-            muted={true}
+            muted={false}  // CRITICAL FIX: Remote videos must NOT be muted to hear other participants
             className="w-full h-full object-cover"
             style={{ backgroundColor: '#1e293b' }}
         />
@@ -154,6 +153,7 @@ export default function VideoMeetComponent() {
     const [isLobbyAudioEnabled, setIsLobbyAudioEnabled] = useState(true);
     const [isLobbyVideoEnabled, setIsLobbyVideoEnabled] = useState(true);
     const [pinnedId, setPinnedId] = useState(null);  // For Speaker View - pinned participant
+    const [localStream, setLocalStream] = useState(null);  // ADDED: React state for local stream to trigger re-renders
 
     // Helper functions for black video and silence audio
     const silence = useCallback(() => {
@@ -239,6 +239,7 @@ export default function VideoMeetComponent() {
             }
 
             window.localStream = stream;
+            setLocalStream(stream);  // ADDED: Update React state
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
                 console.log('✅ Set local video srcObject');
@@ -299,6 +300,7 @@ export default function VideoMeetComponent() {
                 }
 
                 window.localStream = stream;
+                setLocalStream(stream);  // ADDED: Update React state
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = stream;
                 }
@@ -342,6 +344,9 @@ export default function VideoMeetComponent() {
     }, [screen, getUserMedia]);
 
     // Handle signaling messages
+    // ICE candidate buffer - stores candidates that arrive before remote description is set
+    const iceCandidateBufferRef = useRef({});
+    
     const gotMessageFromServer = useCallback(async (fromId, message) => {
         console.log('📥 Got message from server. From:', fromId, 'Type:', JSON.parse(message).sdp?.type || 'ICE');
         
@@ -352,6 +357,20 @@ export default function VideoMeetComponent() {
                     console.log('📨 Processing SDP:', signal.sdp.type);
                     await connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
                     console.log('✅ Set remote description for', fromId);
+                    
+                    // CRITICAL FIX: Flush buffered ICE candidates after remote description is set
+                    if (iceCandidateBufferRef.current[fromId] && iceCandidateBufferRef.current[fromId].length > 0) {
+                        console.log(`🧊 Flushing ${iceCandidateBufferRef.current[fromId].length} buffered ICE candidates for`, fromId);
+                        for (const candidate of iceCandidateBufferRef.current[fromId]) {
+                            try {
+                                await connections[fromId].addIceCandidate(new RTCIceCandidate(candidate));
+                                console.log('🧊 Added buffered ICE candidate');
+                            } catch (e) {
+                                console.error('❌ Error adding buffered ICE candidate:', e);
+                            }
+                        }
+                        iceCandidateBufferRef.current[fromId] = [];
+                    }
                     
                     if (signal.sdp.type === "offer") {
                         const description = await connections[fromId].createAnswer();
@@ -365,8 +384,18 @@ export default function VideoMeetComponent() {
             }
             if (signal.ice) {
                 try {
-                    await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
-                    console.log('🧊 Added ICE candidate from', fromId);
+                    // CRITICAL FIX: Buffer ICE candidates if remote description not yet set
+                    if (connections[fromId] && connections[fromId].remoteDescription && connections[fromId].remoteDescription.type) {
+                        await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
+                        console.log('🧊 Added ICE candidate from', fromId);
+                    } else {
+                        // Buffer the candidate for later
+                        if (!iceCandidateBufferRef.current[fromId]) {
+                            iceCandidateBufferRef.current[fromId] = [];
+                        }
+                        iceCandidateBufferRef.current[fromId].push(signal.ice);
+                        console.log('🧊 Buffered ICE candidate from', fromId, '(waiting for remote description)');
+                    }
                 } catch (e) {
                     console.error("❌ Error adding ICE candidate:", e);
                 }
@@ -459,9 +488,18 @@ export default function VideoMeetComponent() {
                         };
 
                         connections[socketListId].onconnectionstatechange = () => {
-                            console.log(`🔗 Connection State (${socketListId}):`, 
-                                connections[socketListId].connectionState
-                            );
+                            const state = connections[socketListId].connectionState;
+                            console.log(`🔗 Connection State (${socketListId}):`, state);
+                            
+                            // ENHANCED: Automatic recovery on connection failure
+                            if (state === 'failed' || state === 'disconnected') {
+                                console.warn(`⚠️ Connection ${state} for ${socketListId}, attempting ICE restart...`);
+                                try {
+                                    connections[socketListId].restartIce();
+                                } catch (e) {
+                                    console.error('❌ ICE restart failed:', e);
+                                }
+                            }
                         };
 
                         connections[socketListId].onsignalingstatechange = () => {
@@ -605,6 +643,7 @@ export default function VideoMeetComponent() {
             }
             
             window.localStream = stream;
+            setLocalStream(stream);  // ADDED: Update React state
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
             }
@@ -675,6 +714,7 @@ export default function VideoMeetComponent() {
             if (lobbyStream) {
                 console.log('🔄 Using existing lobby stream for meeting');
                 window.localStream = lobbyStream;
+                setLocalStream(lobbyStream);  // ADDED: Update React state
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = lobbyStream;
                 }
@@ -857,51 +897,10 @@ export default function VideoMeetComponent() {
 
     return (
         <div className="h-screen bg-slate-900 flex">
-            {/* Participants Sidebar - Desktop */}
-            <div className={`hidden lg:block w-80 bg-slate-800 border-r border-slate-700 ${showParticipants ? 'block' : 'hidden'}`}>
-                <div className="p-4 border-b border-slate-700">
-                    <h3 className="text-lg font-semibold text-white flex items-center">
-                        <Users className="mr-2 h-5 w-5" />
-                        Participants ({participants.length})
-                    </h3>
-                </div>
-                <div className="p-4 space-y-3 max-h-[calc(100vh-80px)] overflow-y-auto">
-                    {participants.map((participant, index) => (
-                        <div key={participant.socketId} className="flex items-center space-x-3 p-3 rounded-lg bg-slate-700/50">
-                            <Avatar className="h-10 w-10">
-                                <AvatarFallback className="bg-blue-600 text-white">
-                                    {participant.name[0]?.toUpperCase() || 'U'}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-white truncate">
-                                    {participant.name}
-                                    {participant.isLocal && <span className="ml-2 text-xs text-slate-400">(You)</span>}
-                                </p>
-                            </div>
-                            <div className="flex space-x-1">
-                                {participant.isMuted && (
-                                    <Badge variant="destructive" className="text-xs">
-                                        <MicOff className="h-3 w-3 mr-1" />
-                                        Muted
-                                    </Badge>
-                                )}
-                                {participant.isVideoOff && (
-                                    <Badge variant="secondary" className="text-xs">
-                                        <VideoOff className="h-3 w-3 mr-1" />
-                                        Video Off
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
             {/* Main Video Area */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 {/* Header */}
-                <div className="bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
+                <div className="flex-shrink-0 bg-slate-800 border-b border-slate-700 p-4 flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <Button
                             variant="ghost"
@@ -924,7 +923,7 @@ export default function VideoMeetComponent() {
                 </div>
 
                 {/* Video Grid or Whiteboard */}
-                <div className="flex-1 relative bg-slate-900">
+                <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden">
                     {isWhiteboardOpen ? (
                         /* Whiteboard View */
                         <div className="h-full p-4">
@@ -936,7 +935,7 @@ export default function VideoMeetComponent() {
                     ) : (
                         /* Video Layout - Grid or Speaker View */
                         <VideoLayout
-                            localStream={window.localStream}
+                            localStream={localStream}
                             localVideoRef={localVideoRef}
                             peers={videos}
                             pinnedId={pinnedId}
@@ -1012,7 +1011,7 @@ export default function VideoMeetComponent() {
                 </div>
 
                 {/* Control Bar */}
-                <div className="bg-slate-800 border-t border-slate-700 p-4">
+                <div className="flex-shrink-0 bg-slate-800 border-t border-slate-700 p-4">
                     <div className="flex items-center justify-center space-x-4">
                         <Button
                             variant={audio ? "outline" : "destructive"}
@@ -1121,18 +1120,13 @@ export default function VideoMeetComponent() {
                 </DialogContent>
             </Dialog>
 
-            {/* Always-On Voice Assistant - Continuous transcription & wake word */}
-            <VoiceAssistant 
+            {/* AI Sidebar - Collapsible sidebar with AI Assistant */}
+            <AISidebar 
                 socket={socketRef.current} 
                 roomId={window.location.href} 
                 username={username}
-            />
-
-            {/* AI Assistant Panel - Chat UI for text input */}
-            <AIAssistantPanel 
-                socket={socketRef.current} 
-                roomId={window.location.href} 
-                username={username}
+                participants={participants}
+                onEndCall={handleEndCall}
             />
         </div>
     );

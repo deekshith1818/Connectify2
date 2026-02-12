@@ -8,14 +8,31 @@ const userSchema = new Schema({
     },
     username: {
         type: String,
-        required: true
+        required: true,
+        unique: true
+    },
+    email: {
+        type: String,
+        sparse: true,
+        unique: true
     },
     password: {
         type: String,
-        required: true
+        required: function () {
+            return this.authMethod === 'local';
+        }
     },
     token: {
         type: String
+    },
+    googleId: {
+        type: String,
+        sparse: true
+    },
+    authMethod: {
+        type: String,
+        enum: ['local', 'google'],
+        default: 'local'
     }
 });
 

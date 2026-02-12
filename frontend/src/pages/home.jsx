@@ -1,10 +1,13 @@
-import React, { useContext, useState } from 'react'
+import React, { useContext, useState, useEffect, useCallback } from 'react'
 import withAuth from '../utils/withAuth'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { AuthContext } from '../contexts/AuthContext';
 import { NavBar } from '../components/ui/tubelight-navbar';
+import ScheduleMeetingModal from '../components/ScheduleMeetingModal';
+import axios from 'axios';
+import server from '../environment';
 import { 
   Video, 
   Users, 
@@ -15,8 +18,15 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  Home
+  Home,
+  Calendar,
+  CalendarPlus
 } from 'lucide-react';
+
+// Skeleton component for loading states
+const Skeleton = ({ className }) => (
+    <div className={`animate-pulse bg-slate-300 dark:bg-slate-700 rounded ${className}`} />
+);
 
 function HomeComponent() {
     const navigate = useNavigate();
@@ -24,6 +34,59 @@ function HomeComponent() {
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const { addToUserHistory, userData, startMeeting, validateMeeting } = useContext(AuthContext);
+
+    // Dynamic state for stats and meetings
+    const [stats, setStats] = useState(null);
+    const [recentMeetings, setRecentMeetings] = useState([]);
+    const [isLoadingStats, setIsLoadingStats] = useState(true);
+    const [isLoadingMeetings, setIsLoadingMeetings] = useState(true);
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+
+    // Fetch stats from API
+    const fetchStats = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await axios.get(`${server}/api/v1/meetings/stats`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (response.data.success) {
+                setStats(response.data.stats);
+            }
+        } catch (err) {
+            console.error('Error fetching stats:', err);
+        } finally {
+            setIsLoadingStats(false);
+        }
+    }, []);
+
+    // Fetch recent meetings from API
+    const fetchRecentMeetings = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await axios.get(`${server}/api/v1/meetings/recent`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (response.data.success) {
+                setRecentMeetings(response.data.meetings);
+            }
+        } catch (err) {
+            console.error('Error fetching recent meetings:', err);
+        } finally {
+            setIsLoadingMeetings(false);
+        }
+    }, []);
+
+    // Fetch data on mount
+    useEffect(() => {
+        fetchStats();
+        fetchRecentMeetings();
+    }, [fetchStats, fetchRecentMeetings]);
 
     // Join an existing meeting with validation
     const handleJoinVideoCall = async () => {
@@ -65,31 +128,32 @@ function HomeComponent() {
         }
     };
 
-    const stats = [
+    // Handle successful scheduling
+    const handleScheduleSuccess = (meeting) => {
+        fetchRecentMeetings(); // Refresh the recent meetings list
+        setIsScheduleModalOpen(false);
+    };
+
+    // Stats cards data with dynamic values
+    const statsData = [
         {
             title: "Total Meetings",
-            value: "24",
+            value: isLoadingStats ? null : (stats?.totalMeetings ?? 0),
             icon: Video,
             description: "This month"
         },
         {
             title: "Participants",
-            value: "156",
+            value: isLoadingStats ? null : (stats?.totalParticipants ?? 0),
             icon: Users,
             description: "Total joined"
         },
         {
             title: "Meeting Time",
-            value: "12.5h",
+            value: isLoadingStats ? null : `${stats?.totalHours ?? 0}h`,
             icon: Clock,
             description: "This month"
         }
-    ];
-
-    const recentMeetings = [
-        { code: "ABC123", date: "2024-01-15", duration: "45 min" },
-        { code: "XYZ789", date: "2024-01-14", duration: "1h 20 min" },
-        { code: "DEF456", date: "2024-01-13", duration: "30 min" }
     ];
 
     // Navigation items for Tubelight Navbar
@@ -102,6 +166,27 @@ function HomeComponent() {
     const handleLogout = () => {
         localStorage.removeItem("token");
         navigate("/auth");
+    };
+
+    // Format date for display
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        });
+    };
+
+    // Get status badge color
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'scheduled': return 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400';
+            case 'active': return 'bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400';
+            case 'completed': return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
+            default: return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400';
+        }
     };
 
     return (
@@ -123,7 +208,7 @@ function HomeComponent() {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    {stats.map((stat, index) => (
+                    {statsData.map((stat, index) => (
                         <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
                             <CardContent className="p-6">
                                 <div className="flex items-center justify-between">
@@ -131,9 +216,13 @@ function HomeComponent() {
                                         <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
                                             {stat.title}
                                         </p>
-                                        <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                                            {stat.value}
-                                        </p>
+                                        {stat.value === null ? (
+                                            <Skeleton className="h-8 w-16 mt-1" />
+                                        ) : (
+                                            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                                                {stat.value}
+                                            </p>
+                                        )}
                                         <p className="text-xs text-slate-500 dark:text-slate-400">
                                             {stat.description}
                                         </p>
@@ -231,37 +320,75 @@ function HomeComponent() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3">
-                                {recentMeetings.map((meeting, index) => (
-                                    <div
-                                        key={index}
-                                        className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                        onClick={() => {
-                                            setMeetingCode(meeting.code);
-                                        }}
-                                    >
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-                                                <Video className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                {isLoadingMeetings ? (
+                                    // Loading skeletons
+                                    [...Array(3)].map((_, index) => (
+                                        <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                                            <div className="flex items-center space-x-3">
+                                                <Skeleton className="w-8 h-8 rounded-lg" />
+                                                <div>
+                                                    <Skeleton className="h-4 w-20 mb-1" />
+                                                    <Skeleton className="h-3 w-16" />
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-medium text-slate-900 dark:text-white">
-                                                    {meeting.code}
-                                                </p>
-                                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                                    {new Date(meeting.date).toLocaleDateString()}
-                                                </p>
+                                            <div className="text-right">
+                                                <Skeleton className="h-4 w-12 mb-1" />
+                                                <Skeleton className="h-3 w-16" />
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-medium text-slate-900 dark:text-white">
-                                                {meeting.duration}
-                                            </p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                Duration
-                                            </p>
+                                    ))
+                                ) : recentMeetings.length > 0 ? (
+                                    recentMeetings.map((meeting, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                            onClick={() => {
+                                                if (meeting.status === 'scheduled') {
+                                                    // For scheduled meetings, copy the code
+                                                    setMeetingCode(meeting.meetingCode);
+                                                } else {
+                                                    setMeetingCode(meeting.meetingCode);
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                                    meeting.status === 'scheduled' 
+                                                        ? 'bg-blue-100 dark:bg-blue-900' 
+                                                        : 'bg-blue-100 dark:bg-blue-900'
+                                                }`}>
+                                                    {meeting.status === 'scheduled' ? (
+                                                        <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                    ) : (
+                                                        <Video className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        {meeting.title || meeting.meetingCode}
+                                                    </p>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                        {formatDate(meeting.date)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                                    {meeting.duration}
+                                                </p>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(meeting.status)}`}>
+                                                    {meeting.status}
+                                                </span>
+                                            </div>
                                         </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                                        <Video className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                        <p>No meetings yet</p>
+                                        <p className="text-sm">Start your first meeting!</p>
                                     </div>
-                                ))}
+                                )}
                             </div>
                             
                             <Button
@@ -299,18 +426,19 @@ function HomeComponent() {
                                 <Button
                                     variant="outline"
                                     className="h-20 flex-col space-y-2"
-                                    onClick={() => navigate("/history")}
+                                    onClick={() => setIsScheduleModalOpen(true)}
                                 >
-                                    <HistoryIcon className="h-6 w-6" />
-                                    <span className="text-sm">View History</span>
+                                    <CalendarPlus className="h-6 w-6" />
+                                    <span className="text-sm">Schedule Meeting</span>
                                 </Button>
                                 
                                 <Button
                                     variant="outline"
                                     className="h-20 flex-col space-y-2"
+                                    onClick={() => navigate("/history")}
                                 >
-                                    <Users className="h-6 w-6" />
-                                    <span className="text-sm">Invite Team</span>
+                                    <HistoryIcon className="h-6 w-6" />
+                                    <span className="text-sm">View History</span>
                                 </Button>
                                 
                                 <Button
@@ -325,6 +453,13 @@ function HomeComponent() {
                     </Card>
                 </div>
             </main>
+
+            {/* Schedule Meeting Modal */}
+            <ScheduleMeetingModal
+                isOpen={isScheduleModalOpen}
+                onClose={() => setIsScheduleModalOpen(false)}
+                onSuccess={handleScheduleSuccess}
+            />
         </div>
     );
 }

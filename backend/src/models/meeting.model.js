@@ -5,6 +5,7 @@ const meetingSchema = new Schema({
     meetingCode: {
         type: String,
         required: true,
+        unique: true,
         index: true
     },
     hostId: {
@@ -16,6 +17,40 @@ const meetingSchema = new Schema({
     user_id: {
         type: String,
         required: false
+    },
+    // Meeting title/subject
+    title: {
+        type: String,
+        default: 'Untitled Meeting'
+    },
+    // Scheduling fields
+    startTime: {
+        type: Date,
+        default: Date.now
+    },
+    endTime: {
+        type: Date,
+        default: null
+    },
+    // Meeting status
+    status: {
+        type: String,
+        enum: ['scheduled', 'active', 'completed'],
+        default: 'active'
+    },
+    // Participant tracking
+    participantCount: {
+        type: Number,
+        default: 0
+    },
+    // Email participants for notifications
+    participants: [{
+        type: String  // Array of email addresses
+    }],
+    // Flag to prevent duplicate reminder emails
+    reminderSent: {
+        type: Boolean,
+        default: false
     },
     createdAt: {
         type: Date,
@@ -32,8 +67,10 @@ const meetingSchema = new Schema({
     }
 });
 
-// Compound index for faster lookups
+// Compound indexes for faster lookups
 meetingSchema.index({ meetingCode: 1, isActive: 1 });
+meetingSchema.index({ hostId: 1, startTime: -1 });
+meetingSchema.index({ hostId: 1, status: 1 });
 
 const Meeting = mongoose.model("Meeting", meetingSchema);
 export { Meeting };

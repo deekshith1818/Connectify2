@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { addToHistory, getUserHistory, login, register } from "../controllers/user.controller.js";
+import { googleAuth } from "../controllers/googleAuth.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
 
 router.route("/login").post(login)
 router.route("/register").post(register)
+router.route("/auth/google").post(googleAuth)
 router.route("/add_to_activity").post(authMiddleware, addToHistory)
 router.route("/get_all_activity").get(authMiddleware, getUserHistory)
 
